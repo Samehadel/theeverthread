@@ -6,7 +6,11 @@ info:
     One global account with many-to-many workspace memberships. Email/password activation creates one
     default owned workspace. Invitation acceptance adds membership alongside the default. All protected workspace
     resources require explicit X-Workspace-Id; mutations require CSRF. Sessions and refresh cookies retain their
-    established lifetimes.
+    established lifetimes. Entity identifiers are positive bigint values encoded as decimal strings
+    throughout JSON, paths, headers and links; clients must not convert them to JavaScript numbers.
+    submissionId remains a UUID and must be reused for retries. Pagination cursors use version 2.
+    This development schema transition requires empty application tables; old IDs, links and refresh
+    cookies are invalid after database reset.
 paths:
   /api/auth/social/providers:
     get:
@@ -216,7 +220,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/knowledge/tickets/{id}:
     get:
       operationId: getKnowledgeTicket
@@ -229,7 +233,7 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
+            pattern: '^[1-9][0-9]{0,18}$'
       responses:
         "200":
           description: Published content and current automatic classification.
@@ -252,7 +256,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/knowledge/tickets/refine:
     post:
       operationId: refineKnowledgeTicket
@@ -313,7 +317,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /actuator/health:
     get:
       operationId: aggregateHealth
@@ -578,7 +582,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/invitations/sent:
     get:
       operationId: listSentInvitations
@@ -586,7 +590,7 @@ paths:
       description:
         "No truncation or pagination. Ordered by COALESCE(sentAt, attemptedAt) descending,
 
-        then UUID descending. Expired pending and revoked records are excluded; accepted
+        then ID descending. Expired pending and revoked records are excluded; accepted
 
         and failed records remain visible. sentAt is null until a confirmed SMTP submission.
 
@@ -617,7 +621,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/invitations/members:
     get:
       operationId: listActiveMembers
@@ -625,7 +629,7 @@ paths:
       description:
         "No truncation or pagination. Ordered by activation timestamp (ACCOUNT.UPDATED_AT)
 
-        descending, then UUID descending. Only active workspace memberships belonging to active accounts.
+        descending, then ID descending. Only active workspace memberships belonging to active accounts.
 
         Administrator accounts are included in both this list and capacity checks.
 
@@ -648,7 +652,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/invitations/{id}/resend:
     post:
       operationId: resendInvitation
@@ -683,7 +687,7 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
+            pattern: '^[1-9][0-9]{0,18}$'
         - $ref: "#/components/parameters/InvitationCsrf"
       responses:
         "200":
@@ -711,7 +715,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/invitations/status:
     post:
       operationId: getTeamInvitationSendStatus
@@ -746,7 +750,7 @@ paths:
           management.
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
   /api/status:
     get:
       operationId: getStatus
@@ -971,7 +975,7 @@ paths:
               properties:
                 id:
                   type: string
-                  format: uuid
+                  pattern: '^[1-9][0-9]{0,18}$'
                 token:
                   type: string
                   maxLength: 100
@@ -1166,7 +1170,7 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
     get:
       operationId: selectWorkspace
       summary: Validate membership and return selected workspace context
@@ -1224,7 +1228,7 @@ components:
       properties:
         id:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
         title:
           type: string
           maxLength: 200
@@ -1268,7 +1272,7 @@ components:
       properties:
         id:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
         token:
           type: string
           pattern: ^[A-Za-z0-9_-]{43}$
@@ -1313,7 +1317,7 @@ components:
           properties:
             id:
               type: string
-              format: uuid
+              pattern: '^[1-9][0-9]{0,18}$'
             email:
               type: string
               format: email
@@ -1424,12 +1428,12 @@ components:
       properties:
         defaultWorkspaceId:
           type: [string, "null"]
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
           description: The automatically assigned default workspace; independent of current selection.
 
         id:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
         fullName:
           type: string
         email:
@@ -1439,7 +1443,7 @@ components:
           type:
             - string
             - "null"
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
           description: Selected workspace in this response; null only when no active memberships remain.
         workspaceName:
           type:
@@ -1622,12 +1626,12 @@ components:
           properties:
             id:
               type: string
-              format: uuid
+              pattern: '^[1-9][0-9]{0,18}$'
             content:
               $ref: "#/components/schemas/TicketContent"
             authorId:
               type: string
-              format: uuid
+              pattern: '^[1-9][0-9]{0,18}$'
             authorName:
               type: string
             createdAt:
@@ -1681,7 +1685,7 @@ components:
       properties:
         id:
           type: string
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
         name:
           type: string
         role:

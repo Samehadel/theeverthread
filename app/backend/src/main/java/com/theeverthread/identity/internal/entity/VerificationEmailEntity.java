@@ -14,7 +14,8 @@ import java.util.UUID;
 @Getter
 @Setter
 public class VerificationEmailEntity {
-    @Id private UUID accountId;
+    @Id
+    private Long accountId;
 
     @Column(nullable = false, length = 254)
     private String recipient;

@@ -11,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/workspaces")
@@ -22,7 +21,7 @@ public class WorkspaceController {
     public record NameRequest(@NotBlank @Size(max = 200) String name) {}
 
     @GetMapping("/{id}")
-    public AccountView select(Principal principal, @PathVariable UUID id) {
+    public AccountView select(Principal principal, @PathVariable Long id) {
         return workspaces.select(principal.getName(), id);
     }
 
@@ -33,7 +32,7 @@ public class WorkspaceController {
 
     @PatchMapping("/{id}")
     public AccountView rename(
-            Principal principal, @PathVariable UUID id, @Valid @RequestBody NameRequest request) {
+            Principal principal, @PathVariable Long id, @Valid @RequestBody NameRequest request) {
         return workspaces.rename(principal.getName(), id, request.name());
     }
 }

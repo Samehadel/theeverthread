@@ -6,15 +6,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.*;
 
-public interface MembershipRepository extends JpaRepository<MembershipEntity, UUID> {
-    Optional<MembershipEntity> findByAccountIdAndWorkspaceId(UUID accountId, UUID workspaceId);
+public interface MembershipRepository extends JpaRepository<MembershipEntity, Long> {
+    Optional<MembershipEntity> findByAccountIdAndWorkspaceId(Long accountId, Long workspaceId);
 
     Optional<MembershipEntity> findByAccountIdAndWorkspaceIdAndActiveTrue(
-            UUID accountId, UUID workspaceId);
+            Long accountId, Long workspaceId);
 
-    List<MembershipEntity> findByAccountIdAndActiveTrueOrderByWorkspaceNameAsc(UUID accountId);
+    List<MembershipEntity> findByAccountIdAndActiveTrueOrderByWorkspaceNameAsc(Long accountId);
 
-    List<MembershipEntity> findByWorkspaceIdAndActiveTrue(UUID workspaceId);
+    List<MembershipEntity> findByWorkspaceIdAndActiveTrue(Long workspaceId);
 
-    long countByWorkspaceIdAndActiveTrue(UUID workspaceId);
+    long countByWorkspaceIdAndActiveTrue(Long workspaceId);
 }

@@ -47,18 +47,26 @@ class RegistrationIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired IdentityService identity;
+    @Autowired
+
+    IdentityService identity;
     @Autowired com.theeverthread.identity.internal.service.VerificationEmailWorker worker;
-    @Autowired PendingRegistrationCleanup cleanup;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired MockMvc mvc;
-    @Autowired JsonMapper json;
-    @MockitoBean VerificationMail mail;
-    @MockitoBean Clock clock;
+    @Autowired
+    PendingRegistrationCleanup cleanup;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JsonMapper json;
+    @MockitoBean
+    VerificationMail mail;
+    @MockitoBean
+    Clock clock;
     final Instant start = Instant.parse("2026-10-04T12:00:00Z");
     final Map<String, Link> links = new ConcurrentHashMap<>();
 
-    record Link(UUID id, String token) {}
+    record Link(Long id, String token) {}
 
     final String password = "Validpass!";
 
@@ -496,14 +504,14 @@ class RegistrationIntegrationTests {
         identity.register(request("ada@example.com", "company.com"));
         jdbc.update(
                 "UPDATE SHEDLOCK SET LOCK_UNTIL = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL"
-                    + " '1 minute' WHERE NAME = 'verification-email-worker'");
+                        + " '1 minute' WHERE NAME = 'verification-email-worker'");
         try {
             assertThat(worker.runOnce()).isNull();
             verifyNoInteractions(mail);
         } finally {
             jdbc.update(
                     "UPDATE SHEDLOCK SET LOCK_UNTIL = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') -"
-                        + " INTERVAL '1 second' WHERE NAME = 'verification-email-worker'");
+                            + " INTERVAL '1 second' WHERE NAME = 'verification-email-worker'");
         }
         assertThat(worker.runOnce()).isTrue();
         assertThat(identity.deliveryStatus("ada@example.com").deliveryStatus())
@@ -511,7 +519,7 @@ class RegistrationIntegrationTests {
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT LOCK_UNTIL <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') FROM"
-                                    + " SHEDLOCK WHERE NAME = 'verification-email-worker'",
+                                        + " SHEDLOCK WHERE NAME = 'verification-email-worker'",
                                 Boolean.class))
                 .isTrue();
     }
@@ -737,7 +745,7 @@ class RegistrationIntegrationTests {
         assertThat(cookie.getPath()).isEqualTo("/api/auth");
         assertThat(result.getResponse().getHeader("Set-Cookie")).contains("SameSite=Strict");
         assertThat(jdbc.queryForObject("SELECT TOKEN_HASH FROM REFRESH_SESSION", String.class))
-                .doesNotContain(cookie.getValue().substring(37));
+                .doesNotContain(cookie.getValue().substring(cookie.getValue().indexOf('.') + 1));
         return cookie;
     }
 
@@ -789,7 +797,9 @@ class RegistrationIntegrationTests {
         mvc.perform(
                         post("/api/auth/refresh")
                                 .with(csrf())
-                                .cookie(new jakarta.servlet.http.Cookie("THEEVERTHREAD_REFRESH", "bad")))
+                                .cookie(
+                                        new jakarta.servlet.http.Cookie(
+                                                "THEEVERTHREAD_REFRESH", "bad")))
                 .andExpect(status().isUnauthorized());
         when(clock.instant()).thenReturn(start.plus(Duration.ofDays(14)));
         mvc.perform(post("/api/auth/refresh").cookie(cookie).with(csrf()))

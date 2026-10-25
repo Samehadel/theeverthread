@@ -19,7 +19,7 @@ public class ClassificationTransactions {
     private final JdbcTemplate jdbc;
     private final JsonMapper json;
 
-    public record Work(UUID id, UUID token, TicketContent content) {}
+    public record Work(Long id, UUID token, TicketContent content) {}
 
     /** Durable leases recover abandoned work; token checks fence late worker responses. */
     @Transactional
@@ -44,7 +44,7 @@ public class ClassificationTransactions {
                         """,
                         (rs, row) ->
                                 new Work(
-                                        rs.getObject(1, UUID.class),
+                                        rs.getObject(1, Long.class),
                                         rs.getObject(2, UUID.class),
                                         json.readValue(rs.getString(3), TicketContent.class)),
                         UUID.randomUUID());

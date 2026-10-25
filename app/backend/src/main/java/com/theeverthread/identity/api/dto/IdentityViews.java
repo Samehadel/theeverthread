@@ -1,7 +1,8 @@
 package com.theeverthread.identity.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.Instant;
-import java.util.UUID;
 
 public final class IdentityViews {
     private IdentityViews() {}
@@ -10,17 +11,18 @@ public final class IdentityViews {
 
     public record VerificationView(String status, AccountView account) {}
 
-    public record WorkspaceView(UUID id, String name, String role) {}
+    public record WorkspaceView(
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Long id, String name, String role) {}
 
     public record AccountView(
-            UUID id,
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Long id,
             String fullName,
             String email,
-            UUID workspaceId,
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Long workspaceId,
             String workspaceName,
             String accessRole,
             java.util.List<WorkspaceView> workspaces,
-            UUID defaultWorkspaceId) {}
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Long defaultWorkspaceId) {}
 
     public record CredentialsView(
             String email, String passwordHash, String accessRole, boolean active) {}

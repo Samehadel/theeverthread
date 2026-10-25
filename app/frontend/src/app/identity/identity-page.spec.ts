@@ -10,7 +10,7 @@ import { IdentityStore } from './identity.store';
 
 describe('Verification link navigation', () => {
   it('uses a replacement link on the same page without reusing the superseded credential', () => {
-    const id = '00000000-0000-4000-8000-000000000001';
+    const id = '9007199254740993';
     const oldToken = 'a'.repeat(43);
     const newToken = 'b'.repeat(43);
     const fragments = new BehaviorSubject<string | null>(`${id}.${oldToken}`);

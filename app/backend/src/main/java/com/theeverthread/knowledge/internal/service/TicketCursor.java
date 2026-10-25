@@ -6,10 +6,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.Base64;
-import java.util.UUID;
 
 /** Versioned pagination context; tenant authorization is always resolved independently. */
-public record TicketCursor(int version, Instant createdAt, UUID id, String detailsType) {
+public record TicketCursor(int version, Instant createdAt, Long id, String detailsType) {
     public static TicketCursor decode(String encoded, String type) {
         if (encoded == null) return null;
         try {
@@ -18,9 +17,10 @@ public record TicketCursor(int version, Instant createdAt, UUID id, String detai
             var cursor =
                     JsonMapper.shared()
                             .readValue(Base64.getUrlDecoder().decode(encoded), TicketCursor.class);
-            if (cursor.version() != 1
+            if (cursor.version() != 2
                     || cursor.createdAt() == null
                     || cursor.id() == null
+                    || cursor.id() <= 0
                     || cursor.detailsType() == null
                     || !cursor.detailsType().equals(type)
                     || cursor.createdAt().isBefore(Instant.EPOCH)

@@ -15,7 +15,6 @@ import org.springframework.mail.*;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import java.util.Properties;
-import java.util.UUID;
 
 class SmtpVerificationMailTests {
     @Test
@@ -25,8 +24,11 @@ class SmtpVerificationMailTests {
                 .thenReturn(new MimeMessage(Session.getInstance(new Properties())));
         var mail =
                 new SmtpVerificationMail(
-                        sender, "https://theeverthread.example", "no-reply@theeverthread.example", "127.0.0.1");
-        var id = UUID.randomUUID();
+                        sender,
+                        "https://theeverthread.example",
+                        "no-reply@theeverthread.example",
+                        "127.0.0.1");
+        var id = 123L;
         mail.send("ada@example.com", id, "test-token");
         var message = ArgumentCaptor.forClass(MimeMessage.class);
         verify(sender).send(message.capture());
@@ -47,8 +49,11 @@ class SmtpVerificationMailTests {
                 .send(any(MimeMessage.class));
         var mail =
                 new SmtpVerificationMail(
-                        sender, "https://theeverthread.example", "no-reply@theeverthread.example", "127.0.0.1");
-        assertThatThrownBy(() -> mail.send("ada@example.com", UUID.randomUUID(), "test-token"))
+                        sender,
+                        "https://theeverthread.example",
+                        "no-reply@theeverthread.example",
+                        "127.0.0.1");
+        assertThatThrownBy(() -> mail.send("ada@example.com", 123L, "test-token"))
                 .isInstanceOf(EmailDeliveryException.class)
                 .hasMessageNotContaining("private SMTP diagnostic");
     }
@@ -62,7 +67,7 @@ class SmtpVerificationMailTests {
                         "http://localhost:4200",
                         "no-reply@theeverthread.local",
                         "smtp-relay.brevo.com");
-        assertThatThrownBy(() -> mail.send("ada@example.com", UUID.randomUUID(), "token"))
+        assertThatThrownBy(() -> mail.send("ada@example.com", 123L, "token"))
                 .isInstanceOfSatisfying(
                         EmailDeliveryException.class,
                         exception ->

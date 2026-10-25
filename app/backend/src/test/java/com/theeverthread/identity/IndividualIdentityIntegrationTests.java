@@ -52,22 +52,35 @@ class IndividualIdentityIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired IdentityService identity;
-    @Autowired SocialIdentityService social;
-    @Autowired KnowledgeService knowledge;
-    @Autowired InvitationAcceptanceService acceptance;
-    @Autowired InvitationTransactions invitations;
-    @Autowired VerificationEmailWorker worker;
-    @Autowired PendingRegistrationCleanup cleanup;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired MockMvc mvc;
-    @Autowired JsonMapper json;
-    @MockitoBean VerificationMail mail;
-    @MockitoBean Clock clock;
+    @Autowired
+
+    IdentityService identity;
+    @Autowired
+    SocialIdentityService social;
+    @Autowired
+    KnowledgeService knowledge;
+    @Autowired
+    InvitationAcceptanceService acceptance;
+    @Autowired
+    InvitationTransactions invitations;
+    @Autowired
+    VerificationEmailWorker worker;
+    @Autowired
+    PendingRegistrationCleanup cleanup;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JsonMapper json;
+    @MockitoBean
+    VerificationMail mail;
+    @MockitoBean
+    Clock clock;
     final Instant now = Instant.parse("2026-10-21T00:00:00Z");
     final Map<String, Link> links = new ConcurrentHashMap<>();
 
-    record Link(UUID id, String token) {}
+    record Link(Long id, String token) {}
 
     final String password = "Validpass!";
 
@@ -101,7 +114,7 @@ class IndividualIdentityIntegrationTests {
         identity.verify(link.id(), link.token());
     }
 
-    UUID workspace() {
+    Long workspace() {
         identity.register(new RegistrationRequest("Admin", "admin@example.com", password));
         worker.runOnce();
         var link = links.get("admin@example.com");
@@ -230,7 +243,7 @@ class IndividualIdentityIntegrationTests {
         jdbc.update(
                 "INSERT INTO WORKSPACE_MEMBERSHIP(ID, ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (?, ?,"
                         + " ?, 'MEMBER')",
-                UUID.randomUUID(),
+                Long.MAX_VALUE,
                 account.id(),
                 first);
         assertThat(identity.current("person@example.com").workspaces()).hasSize(2);
@@ -286,7 +299,7 @@ class IndividualIdentityIntegrationTests {
                                         "INSERT INTO"
                                             + " OAUTH_IDENTITY(ID,ACCOUNT_ID,PROVIDER,SUBJECT_ID)"
                                             + " VALUES (?,?,?,?)",
-                                        UUID.randomUUID(),
+                                        Long.MAX_VALUE,
                                         account.id(),
                                         "linkedin",
                                         "one"))
@@ -548,8 +561,8 @@ class IndividualIdentityIntegrationTests {
                 "WORKSPACE_ACCESS_DENIED");
     }
 
-    UUID workspaceFor(String email) {
+    Long workspaceFor(String email) {
         return jdbc.queryForObject(
-                "SELECT DEFAULT_WORKSPACE_ID FROM ACCOUNT WHERE EMAIL = ?", UUID.class, email);
+                "SELECT DEFAULT_WORKSPACE_ID FROM ACCOUNT WHERE EMAIL = ?", Long.class, email);
     }
 }

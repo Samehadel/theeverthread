@@ -5,8 +5,6 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.UUID;
-
 /** A person's role and access belong to a workspace, never to their global account. */
 @Entity
 @Table(
@@ -15,7 +13,9 @@ import java.util.UUID;
 @Getter
 @Setter
 public class MembershipEntity {
-    @Id private UUID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ACCOUNT_ID", nullable = false)
