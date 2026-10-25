@@ -2391,3 +2391,48 @@ figure.knowledge-code {
     flex-direction: column;
   }
 }
+
+/* Explicit, field-scoped refinement choices and reversible previews. */
+.refinement-controls {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 0;
+  min-width: 0;
+}
+.refinement-controls legend {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.refinement-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.refinement-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.refinement-option.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.refinement-option:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.refinement-option input[type=radio] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.refinement-controls:disabled { opacity: 0.6; }
+.refinement-action { margin-top: 10px; min-height: 44px; font-size: 12px; }
+.refinement-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.refinement-comparison > div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.refinement-comparison h4 { margin-top: 0; }
+.refinement-comparison p { white-space: pre-wrap; margin-bottom: 0; font-size: 14px; }
+@media (max-width: 600px) {
+  .refinement-comparison { grid-template-columns: minmax(0, 1fr); }
+}

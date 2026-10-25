@@ -500,14 +500,14 @@ class KnowledgeIntegrationTests {
 
     @Test
     void refinementRephrasesOnlyExistingSelectedTextAndNeverMutatesPublication() {
-        when(ai.refine(content().title(), "title")).thenReturn("Safe retries");
+        when(ai.refine(content().title(), "title", "proofread")).thenReturn("Safe retries");
         var result =
                 knowledge.refine(
                         "member@example.com",
                         workspaceFor("member@example.com"),
                         new RefinementRequest("title", content()));
         assertThat(result).isEqualTo(new RefinementView("title", "Safe retries"));
-        verify(ai).refine(content().title(), "title");
+        verify(ai).refine(content().title(), "title", "proofread");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM KNOWLEDGE_TICKET", Integer.class))
                 .isZero();
         var withoutCapture =
@@ -520,8 +520,8 @@ class KnowledgeIntegrationTests {
                                         new RefinementRequest("capture", withoutCapture)))
                 .isInstanceOfSatisfying(
                         KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(400));
-        verify(ai, never()).refine(eq(""), anyString());
-        when(ai.refine(content().title(), "title")).thenThrow(new IllegalStateException("offline"));
+        verify(ai, never()).refine(eq(""), anyString(), anyString());
+        when(ai.refine(content().title(), "title", "proofread")).thenThrow(new IllegalStateException("offline"));
         assertThatThrownBy(
                         () ->
                                 knowledge.refine(
@@ -542,8 +542,22 @@ class KnowledgeIntegrationTests {
     }
 
     @Test
+    void selectedModeReachesProviderAndUnknownModesNeverDo() {
+        when(ai.refine(content().title(), "title", "rewrite"))
+                .thenReturn("Make every retry safe with a stable key");
+        var result = knowledge.refine("member@example.com", workspaceFor("member@example.com"),
+                new RefinementRequest("title", content(), "rewrite"));
+        assertThat(result.text()).isEqualTo("Make every retry safe with a stable key");
+        verify(ai).refine(content().title(), "title", "rewrite");
+        assertThatThrownBy(() -> knowledge.refine("member@example.com", workspaceFor("member@example.com"),
+                new RefinementRequest("title", content(), "invent")))
+                .isInstanceOfSatisfying(KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(400));
+        verify(ai, never()).refine(anyString(), anyString(), eq("invent"));
+    }
+
+    @Test
     void rejectsRefinementThatExpandsFarBeyondTheOriginalWording() {
-        when(ai.refine(content().capture(), "capture"))
+        when(ai.refine(content().capture(), "capture", "proofread"))
                 .thenReturn(
                         "A long new explanation with facts and suggestions that the user never entered. "
                                 .repeat(4));
@@ -581,7 +595,7 @@ class KnowledgeIntegrationTests {
 
     @Test
     void refinementTransportReturnsOnlySelectedFieldAndRejectsDetails() throws Exception {
-        when(ai.refine(content().capture(), "capture")).thenReturn("Reuse a stable key.");
+        when(ai.refine(content().capture(), "capture", "proofread")).thenReturn("Reuse a stable key.");
         mvc.perform(
                         post("/api/knowledge/tickets/refine")
                                 .with(user("member@example.com").roles("MEMBER"))

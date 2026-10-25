@@ -94,7 +94,7 @@ class SpringAiKnowledgeAiTests {
                                     new TicketContent.DetailBlock(
                                             "code", "return key;", "java", null)));
             assertThat(ai.refine(content.title(), "title")).isEqualTo("Retry safely");
-            assertThat(ai.refine(content.capture(), "capture")).isEqualTo("Use a stable key.");
+            assertThat(ai.refine(content.capture(), "capture", "rewrite")).isEqualTo("Use a stable key.");
             assertThat(ai.classify(content)).containsExactly("area:backend");
             for (var request : requests) {
                 var payload = json.readTree(request);
@@ -129,7 +129,8 @@ class SpringAiKnowledgeAiTests {
                                         ? "existing knowledge-ticket Title"
                                         : "existing knowledge-ticket Capture");
                 assertThat(system).contains("original has " + original.length() + " characters");
-                assertThat(system).doesNotContain("{inputLength}", "{maxCharacters}");
+                assertThat(system).doesNotContain("{inputLength}", "{maxCharacters}", "{transformation}");
+                assertThat(system).contains(i == 0 ? "Proofread only" : "Rewrite substantially");
             }
             assertThat(requests.get(0)).doesNotContain("Use a stable key");
             assertThat(requests.get(1)).doesNotContain("retry safely");

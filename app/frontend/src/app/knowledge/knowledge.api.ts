@@ -9,6 +9,7 @@ import {
   TicketContent,
   Refinement,
   RefinementField,
+  RefinementMode,
 } from './knowledge.models';
 @Injectable({ providedIn: 'root' })
 export class KnowledgeApi {
@@ -35,10 +36,15 @@ export class KnowledgeApi {
       workspaceId,
     );
   }
-  refine(content: TicketContent, field: RefinementField, workspaceId: string) {
+  refine(
+    content: TicketContent,
+    field: RefinementField,
+    workspaceId: string,
+    mode: RefinementMode,
+  ) {
     return this.post<Refinement>(
       '/api/knowledge/tickets/refine',
-      { content, field },
+      { content, field, mode },
       workspaceId,
     );
   }

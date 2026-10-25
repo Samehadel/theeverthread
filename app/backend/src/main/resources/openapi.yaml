@@ -256,7 +256,7 @@ paths:
   /api/knowledge/tickets/refine:
     post:
       operationId: refineKnowledgeTicket
-      summary: Concisely rephrase existing wording in the selected Title or Capture.
+      summary: Refine existing Title or Capture wording at the selected transformation level.
       security:
         - SessionCookie: []
       parameters:
@@ -1658,13 +1658,20 @@ components:
           enum:
             - title
             - capture
+        mode:
+          type: [string, "null"]
+          enum: [proofread, rephrase, rewrite, null]
+          default: proofread
+          description: Proofread corrects mechanics; rephrase improves clarity and flow; rewrite substantially restructures expression while preserving meaning. Omitted or null uses proofread for older clients.
         content:
           $ref: "#/components/schemas/TicketContent"
       description:
         Only existing selected-field wording is sent to the provider. Blank fields cannot be refined.
         Details are not refinement context or targets. All required ticket content must validate. Suggestions retain
-        meaning and are bounded to the original trimmed length plus 20 percent (rounded up), with a minimum four-character
-        allowance, and the field limit.
+        meaning without adding facts. Proofread allows the original trimmed length plus 20 percent (rounded up),
+        minimum four extra characters. Rephrase allows 50 percent growth (rounded up), minimum 20 extra characters.
+        Rewrite allows 100 percent growth, minimum 60 extra characters. All modes respect the field limit.
+        Unknown modes fail validation before contacting the provider.
     Workspace:
       type: object
       required:

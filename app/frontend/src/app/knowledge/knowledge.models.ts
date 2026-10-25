@@ -26,6 +26,8 @@ export interface Ticket {
   classificationStatus: string;
   attributes: string[];
 }
+export const refinementModes = ['proofread', 'rephrase', 'rewrite'] as const;
+export type RefinementMode = (typeof refinementModes)[number];
 export type RefinementField = 'title' | 'capture';
 export interface Refinement {
   field: RefinementField;

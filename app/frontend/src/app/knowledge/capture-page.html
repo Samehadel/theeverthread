@@ -31,15 +31,7 @@
               <label for="ticket-title"
                 >{{ t("knowledge.fields.title") }}
                 <span>{{ t("knowledge.required") }}</span></label
-              ><button
-                class="knowledge-ai"
-                type="button"
-                [disabled]="!canRefine('title')"
-                (click)="refine('title')"
-                [attr.aria-label]="t('knowledge.refineTitle')"
               >
-                ✧
-              </button>
             </div>
             <input
               id="ticket-title"
@@ -54,21 +46,17 @@
               {{ t("knowledge.titleHint") }}
               <span>{{ content().title.length }}/200</span>
             </p>
+            <ng-container
+              [ngTemplateOutlet]="refinementControls"
+              [ngTemplateOutletContext]="{ field: 'title' }"
+            />
           </div>
           <div class="knowledge-field">
             <div class="knowledge-label">
               <label for="ticket-capture"
                 >{{ t("knowledge.fields.capture") }}
                 <span>{{ t("knowledge.optional") }}</span></label
-              ><button
-                class="knowledge-ai"
-                type="button"
-                [disabled]="!canRefine('capture')"
-                (click)="refine('capture')"
-                [attr.aria-label]="t('knowledge.refineCapture')"
               >
-                ✧
-              </button>
             </div>
             <textarea
               id="ticket-capture"
@@ -83,6 +71,10 @@
               {{ t("knowledge.captureHint") }}
               <span>{{ content().capture?.length ?? 0 }}/1,000</span>
             </p>
+            <ng-container
+              [ngTemplateOutlet]="refinementControls"
+              [ngTemplateOutletContext]="{ field: 'capture' }"
+            />
           </div>
           <div class="knowledge-label">
             <label for="writing-template">{{ t("knowledge.template") }}</label
@@ -285,30 +277,6 @@
           {{ t("knowledge.refineCapture") }}
         </button>
       </div>
-      @if (store.refining()) {
-        <p role="status">{{ t("knowledge.refining") }}</p>
-      }
-      @if (store.refinementError()) {
-        <p role="alert" class="form-alert">{{ t(store.refinementError()) }}</p>
-      }
-      @if (store.suggestion(); as suggestion) {
-        <section class="knowledge-suggestion" aria-live="polite">
-          <h3>{{ t("knowledge.suggestion") }}</h3>
-          <h4>{{ t("knowledge.fields." + suggestion.field) }}</h4>
-          <p>{{ suggestion.text }}</p>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" class="button" (click)="accept()">
-              {{ t("knowledge.accept") }}</button
-            ><button
-              type="button"
-              class="button secondary"
-              (click)="store.discard()"
-            >
-              {{ t("knowledge.discard") }}
-            </button>
-          </div>
-        </section>
-      }
       <hr />
       <h3>{{ t("knowledge.workspaceVisibility") }}</h3>
       <p>{{ t("knowledge.workspaceHint") }}</p>
@@ -317,4 +285,92 @@
       <p class="knowledge-hint">{{ t("knowledge.externalAi") }}</p>
     </aside>
   </main>
+  <ng-template #refinementControls let-field="field">
+    <fieldset
+      class="refinement-controls"
+      [disabled]="locked() || workspaceChanged()"
+    >
+      <legend>
+        {{ t('knowledge.transformation') }} · {{ t('knowledge.fields.' + field) }}
+      </legend>
+      <div class="refinement-options">
+        @for (mode of refinementModes; track mode) {
+          <label
+            class="refinement-option"
+            [class.is-selected]="modeFor(field) === mode"
+          >
+            <input
+              type="radio"
+              [name]="'refinement-' + field"
+              [value]="mode"
+              [checked]="modeFor(field) === mode"
+              (change)="selectRefinementMode(field, mode)"
+              [attr.aria-describedby]="field + '-mode-hint'"
+            />
+            <span>{{ t('knowledge.modes.' + mode) }}</span>
+          </label>
+        }
+      </div>
+      <p class="knowledge-hint" [id]="field + '-mode-hint'">
+        {{ t('knowledge.modeHints.' + modeFor(field)) }}
+      </p>
+    </fieldset>
+    <button
+      type="button"
+      class="button secondary refinement-action"
+      [disabled]="!canRefine(field)"
+      (click)="refine(field)"
+      [attr.aria-describedby]="field + '-mode-hint'"
+    >
+      ✧ {{ t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture') }}
+    </button>
+    @if (refinementField() === field) {
+      <div aria-live="polite" [attr.aria-busy]="store.refining()">
+        @if (store.refining()) {
+          <p role="status" class="knowledge-hint">{{ t('knowledge.refining') }}</p>
+        }
+        @if (store.refinementError()) {
+          <p role="alert" class="form-alert">{{ t(store.refinementError()) }}</p>
+        }
+        @if (store.suggestion(); as suggestion) {
+          <section class="knowledge-suggestion">
+            <h3>{{ t('knowledge.suggestion') }}</h3>
+            <p class="knowledge-hint">
+              {{ t('knowledge.modes.' + modeFor(field)) }} · {{ t('knowledge.reviewHint') }}
+            </p>
+            @if (suggestion.text === originalFor(field)) {
+              <p class="knowledge-hint">{{ t('knowledge.unchanged') }}</p>
+            }
+            <div class="refinement-comparison">
+              <div>
+                <h4>{{ t('knowledge.original') }}</h4>
+                <p>{{ originalFor(field) }}</p>
+              </div>
+              <div>
+                <h4>{{ t('knowledge.proposed') }}</h4>
+                <p>{{ suggestion.text }}</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="button"
+                (click)="accept()"
+                [disabled]="workspaceChanged() || suggestion.text === originalFor(field)"
+              >
+                {{ t('knowledge.accept') }}
+              </button>
+              <button
+                type="button"
+                class="button secondary"
+                (click)="store.discard()"
+              >
+                {{ t('knowledge.discard') }}
+              </button>
+            </div>
+          </section>
+        }
+      </div>
+    }
+  </ng-template>
 </ng-container>

@@ -300,15 +300,15 @@
     "moveDown": "Move block down",
     "preview": "Preview Details",
     "hidePreview": "Hide preview",
-    "aiHint": "Rephrase existing Title or Capture wording independently. Keep the same meaning and a similar length. Enter text in a field before refining it.",
+    "aiHint": "Choose how much to change each field, then select Refine. Your original stays until you accept a suggestion.",
     "visibility": "Visible to your workspace",
     "autoAttributes": "Attributes are added automatically after publishing.",
     "publish": "Publish ticket",
     "publishing": "Publishing…",
     "beforeShare": "Before you share",
-    "polish": "A little polish.",
-    "polishIntro": "Polish only what you wrote in Title or Capture. Suggestions stay concise and preserve your meaning.",
-    "refining": "Refining…",
+    "polish": "Make it say what you mean.",
+    "polishIntro": "Choose a refinement level below Title or Capture. Proofread for small fixes, Rephrase for clarity, or Rewrite for a fresh expression of the same idea.",
+    "refining": "Preparing your suggestion… Your original is preserved.",
     "refineTitle": "Refine Title",
     "refineCapture": "Refine Capture",
     "suggestion": "Suggested wording",
@@ -351,7 +351,22 @@
     "browseLoading": "Loading knowledge…",
     "browseError": "Knowledge could not be loaded. Please retry.",
     "detailRefreshError": "This ticket could not be refreshed. The loaded content is still available. Please retry.",
-    "workspaceChanged": "Workspace access changed. This draft stays in its original workspace and cannot be published here. Copy any writing you need before leaving."
+    "workspaceChanged": "Workspace access changed. This draft stays in its original workspace and cannot be published here. Copy any writing you need before leaving.",
+    "transformation": "How much should change?",
+    "modes": {
+      "proofread": "Proofread",
+      "rephrase": "Rephrase",
+      "rewrite": "Rewrite"
+    },
+    "modeHints": {
+      "proofread": "Light touch. Fix spelling, grammar, and punctuation; keep your wording and structure.",
+      "rephrase": "A clearer expression. Improve wording and flow while staying close to your original.",
+      "rewrite": "A fresh expression. Reshape the whole sentence while keeping your facts and intent."
+    },
+    "reviewHint": "Same facts and intent. Review before accepting.",
+    "original": "Your original",
+    "proposed": "Proposed wording",
+    "unchanged": "This wording already fits the selected level. Try a stronger level for more change."
   },
   "workspace": {
     "navigation": "Workspace navigation",

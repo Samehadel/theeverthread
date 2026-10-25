@@ -6,6 +6,7 @@ import { KnowledgeApi } from './knowledge.api';
 import {
   Refinement,
   RefinementField,
+  RefinementMode,
   Ticket,
   TicketContent,
 } from './knowledge.models';
@@ -51,16 +52,17 @@ export const KnowledgeStore = signalStore(
     const refine = rxMethod<{
       content: TicketContent;
       field: RefinementField;
+      mode: RefinementMode;
       workspaceId: string;
     }>(
       pipe(
-        exhaustMap(({ content, field, workspaceId }) => {
+        exhaustMap(({ content, field, workspaceId, mode }) => {
           patchState(store, {
             refining: true,
             refinementError: '',
             suggestion: null,
           });
-          return api.refine(content, field, workspaceId).pipe(
+          return api.refine(content, field, workspaceId, mode).pipe(
             tap((suggestion) =>
               patchState(store, { suggestion, refining: false }),
             ),

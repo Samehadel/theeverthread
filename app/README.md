@@ -311,8 +311,12 @@ the proposed decision is in `architecture/decisions/0005-session-refresh.md`.
 ## Knowledge capture and monitoring
 
 Active members and administrators can open **Capture knowledge** from Knowledge. Title and Details are required; Capture is optional. Refine Title or Capture
-independently and accept each suggestion separately. Refinement rephrases only
-the selected field's existing text; blank Capture cannot be refined. Prompts live
+independently, choosing Proofread (mechanics), Rephrase (clarity, the UI default),
+or Rewrite (substantial restructuring). Compare the original and suggestion beside
+the field and explicitly accept or discard. Each field keeps its own choice for the
+writing session; changing the active mode clears its previous suggestion. The API
+accepts an optional `mode`; omission retains Proofread for older clients. Refinement
+uses only the selected field's existing text; blank Capture cannot be refined. Prompts live
 in backend `resources/prompts/knowledge/*.st`. Details are never refinement context.
 The Writing Studio publishes immediately, then classifies in the background.
 Set the server-only `OPENAI_API_KEY` for Spring AI ChatClient with OpenAI
