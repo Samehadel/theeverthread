@@ -368,7 +368,19 @@
     "unchanged": "No changes needed at this level. Choose another action for a different approach.",
     "refinementHelp": "What will each action change?",
     "refinementRequired": "Complete the required fields to enable refinement.",
-    "captureRefineEmpty": "Add Capture text to refine it."
+    "captureRefineEmpty": "Add Capture text to refine it.",
+    "editor": {
+      "formatting": "Details formatting",
+      "undo": "Undo",
+      "redo": "Redo",
+      "placeholder": "Start writing your knowledge…",
+      "help": "Write naturally. Try ## for a heading, - for a list, or ``` for code. Undo with ⌘Z / Ctrl+Z.",
+      "linkText": "Link text",
+      "saveLink": "Apply link",
+      "linkError": "Enter link text and a valid https:// or http:// address.",
+      "tooManyBlocks": "Keep your document to 200 paragraphs or sections.",
+      "codingHint": "Coding needs a code section. Choose Code in the toolbar or type ```."
+    }
   },
   "workspace": {
     "navigation": "Workspace navigation",

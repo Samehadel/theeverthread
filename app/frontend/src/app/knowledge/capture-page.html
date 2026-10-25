@@ -11,17 +11,17 @@
     <div class="knowledge-writing">
       <div class="flex items-center justify-between gap-4">
         <p class="eyebrow">{{ t("knowledge.eyebrow") }}</p>
-        <a class="button secondary" routerLink="/workspace">{{
-          t("knowledge.cancel")
-        }}</a>
+        <a class="button secondary" routerLink="/workspace"
+          >{{ t("knowledge.cancel") }}</a
+        >
       </div>
       <h1>{{ t("knowledge.title") }}</h1>
       <p class="knowledge-intro">{{ t("knowledge.intro") }}</p>
       @if (workspaceChanged()) {
-        <p role="alert" class="form-alert">
-          {{ t("knowledge.workspaceChanged") }}
-          <a routerLink="/workspace">{{ t("workspace.selectRequired") }}</a>
-        </p>
+      <p role="alert" class="form-alert">
+        {{ t("knowledge.workspaceChanged") }}
+        <a routerLink="/workspace">{{ t("workspace.selectRequired") }}</a>
+      </p>
       }
       <form class="knowledge-card" (ngSubmit)="publish()">
         <fieldset [disabled]="locked()" class="knowledge-fields">
@@ -32,8 +32,11 @@
                 >{{ t("knowledge.fields.title") }}
                 <span>{{ t("knowledge.required") }}</span></label
               >
-              <button type="button" class="text-link refinement-shortcut"
-                (click)="showRefinement('title')">
+              <button
+                type="button"
+                class="text-link refinement-shortcut"
+                (click)="showRefinement('title')"
+              >
                 ✧ {{ t("knowledge.refineTitle") }}
               </button>
             </div>
@@ -57,8 +60,11 @@
                 >{{ t("knowledge.fields.capture") }}
                 <span>{{ t("knowledge.optional") }}</span></label
               >
-              <button type="button" class="text-link refinement-shortcut"
-                (click)="showRefinement('capture')">
+              <button
+                type="button"
+                class="text-link refinement-shortcut"
+                (click)="showRefinement('capture')"
+              >
                 ✧ {{ t("knowledge.refineCapture") }}
               </button>
             </div>
@@ -85,15 +91,15 @@
               (ngModelChange)="update('template', $event)"
             >
               @for (template of templates; track template) {
-                <option [value]="template">
-                  {{ t("knowledge.templates." + template) }}
-                </option>
+              <option [value]="template">
+                {{ t("knowledge.templates." + template) }}
+              </option>
               }
             </select>
           </div>
           <div class="knowledge-field">
             <div class="knowledge-label">
-              <h2>
+              <h2 id="details-label">
                 {{ t("knowledge.fields.details") }}
                 <span>{{ t("knowledge.required") }}</span>
               </h2>
@@ -101,148 +107,35 @@
             <p id="details-hint" class="knowledge-hint">
               {{ t("knowledge.guidance." + content().template) }}
             </p>
-            <div class="knowledge-editor">
-              <div
-                class="knowledge-toolbar"
-                role="group"
-                [attr.aria-label]="t('knowledge.addBlock')"
-              >
-                @for (type of blockTypes; track type) {
-                  <button
-                    type="button"
-                    (click)="add(type)"
-                    [disabled]="content().details.length >= 200"
-                  >
-                    + {{ t("knowledge.blocks." + type) }}
-                  </button>
-                }
-              </div>
-              <div class="knowledge-blocks">
-                @for (item of content().details; track $index; let i = $index) {
-                  <div
-                    class="knowledge-block"
-                    [class.knowledge-code]="item.type === 'code'"
-                  >
-                    <div class="knowledge-block-heading">
-                      <label [for]="'block-' + i"
-                        >{{ t("knowledge.blocks." + item.type) }}
-                        {{ i + 1 }}</label
-                      >
-                      <div class="flex items-center gap-2">
-                        @if (item.type === "code") {
-                          <select
-                            [name]="'language-' + i"
-                            [ngModel]="item.language"
-                            (ngModelChange)="block(i, { language: $event })"
-                            [attr.aria-label]="
-                              t('knowledge.language') + ' ' + (i + 1)
-                            "
-                          >
-                            @for (language of languages; track language) {
-                              <option [value]="language">{{ language }}</option>
-                            }
-                          </select>
-                        }
-                        <button
-                          type="button"
-                          (click)="move(i, -1)"
-                          [disabled]="i === 0"
-                          [attr.aria-label]="
-                            t('knowledge.moveUp') + ' ' + (i + 1)
-                          "
-                        >
-                          ↑</button
-                        ><button
-                          type="button"
-                          (click)="move(i, 1)"
-                          [disabled]="i === content().details.length - 1"
-                          [attr.aria-label]="
-                            t('knowledge.moveDown') + ' ' + (i + 1)
-                          "
-                        >
-                          ↓</button
-                        ><button
-                          type="button"
-                          (click)="remove(i)"
-                          [attr.aria-label]="
-                            t('knowledge.remove') + ' ' + (i + 1)
-                          "
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </div>
-                    <textarea
-                      [id]="'block-' + i"
-                      [name]="'block-' + i"
-                      [ngModel]="item.text"
-                      (ngModelChange)="block(i, { text: $event })"
-                      [rows]="
-                        item.type === 'code'
-                          ? 6
-                          : item.type === 'heading'
-                            ? 1
-                            : 3
-                      "
-                      maxlength="30000"
-                      [spellcheck]="item.type !== 'code'"
-                      [class.font-mono]="item.type === 'code'"
-                      aria-describedby="details-hint"
-                      [placeholder]="t('knowledge.placeholders.' + item.type)"
-                    ></textarea>
-                    @if (item.type === "link") {
-                      <div class="knowledge-link-input">
-                        <label [for]="'url-' + i">{{
-                          t("knowledge.url")
-                        }}</label
-                        ><input
-                          [id]="'url-' + i"
-                          [name]="'url-' + i"
-                          type="url"
-                          [ngModel]="item.url"
-                          (ngModelChange)="block(i, { url: $event })"
-                          placeholder="https://"
-                          maxlength="30000"
-                        />
-                      </div>
-                    }
-                  </div>
-                }
-              </div>
-            </div>
+            <app-details-editor
+              [blocks]="content().details"
+              [disabled]="locked() || workspaceChanged()"
+              (blocksChange)="updateDetails($event)"
+            />
             <div class="knowledge-hint">
               <span [class.field-error]="length() > 30000"
                 >{{ length() }}/30,000</span
-              ><button
-                type="button"
-                class="text-link"
-                (click)="preview.set(!preview())"
               >
-                {{
-                  t(preview() ? "knowledge.hidePreview" : "knowledge.preview")
-                }}
-              </button>
+              @if (content().details.length > 200) {
+              <span class="field-error"
+                >{{ t('knowledge.editor.tooManyBlocks') }}</span
+              >
+              } @if (content().template === 'Coding') {
+              <span>{{ t('knowledge.editor.codingHint') }}</span>
+              }
             </div>
-            @if (preview()) {
-              <section
-                class="knowledge-preview"
-                [attr.aria-label]="t('knowledge.preview')"
-              >
-                <app-details-view [blocks]="content().details" />
-              </section>
-            }
           </div>
           <p class="knowledge-hint">✧ {{ t("knowledge.aiHint") }}</p>
         </fieldset>
         @if (store.error()) {
-          <p role="alert" class="form-alert">{{ t(store.error()) }}</p>
-          <p class="knowledge-hint">{{ t("knowledge.retryHint") }}</p>
+        <p role="alert" class="form-alert">{{ t(store.error()) }}</p>
+        <p class="knowledge-hint">{{ t("knowledge.retryHint") }}</p>
         }
         <div class="knowledge-publish">
           <p>
-            {{ t("knowledge.visibility") }}<br /><span>{{
-              t("knowledge.autoAttributes")
-            }}</span>
+            {{ t("knowledge.visibility") }}<br /><span
+              >{{ t("knowledge.autoAttributes") }}</span
+            >
           </p>
           <button
             class="button"
@@ -260,57 +153,56 @@
       <h2>{{ t("knowledge.polish") }}</h2>
       <p>{{ t("knowledge.polishIntro") }}</p>
       <p id="refinement-required" class="refinement-required">
-        @if (!valid()) {
-          {{ t('knowledge.refinementRequired') }}
-        }
+        @if (!valid()) { {{ t('knowledge.refinementRequired') }} }
       </p>
       @for (field of refinementFields; track field) {
-        <section
-          class="refinement-group"
-          tabindex="-1"
-          [id]="'refinement-' + field"
-          [attr.aria-labelledby]="'refinement-heading-' + field"
+      <section
+        class="refinement-group"
+        tabindex="-1"
+        [id]="'refinement-' + field"
+        [attr.aria-labelledby]="'refinement-heading-' + field"
+      >
+        <h3 [id]="'refinement-heading-' + field">
+          {{ t('knowledge.fields.' + field) }}
+        </h3>
+        <div
+          class="refinement-options"
+          role="group"
+          [attr.aria-label]="t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture')"
         >
-          <h3 [id]="'refinement-heading-' + field">{{ t('knowledge.fields.' + field) }}</h3>
-          <div
-            class="refinement-options"
-            role="group"
-            [attr.aria-label]="t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture')"
+          @for (mode of refinementModes; track mode) {
+          <button
+            type="button"
+            class="refinement-option"
+            [id]="'refine-' + field + '-' + mode"
+            [disabled]="!canRefine(field)"
+            [class.is-active]="refinementField() === field && requestedMode() === mode && (store.refining() || store.suggestion())"
+            [attr.aria-label]="t('knowledge.modes.' + mode) + ' ' + t('knowledge.fields.' + field)"
+            [attr.aria-describedby]="'refinement-help-' + mode + ' refinement-required'"
+            [attr.title]="t('knowledge.modeHints.' + mode)"
+            (click)="refine(field, mode)"
           >
-            @for (mode of refinementModes; track mode) {
-              <button
-                type="button"
-                class="refinement-option"
-                [id]="'refine-' + field + '-' + mode"
-                [disabled]="!canRefine(field)"
-                [class.is-active]="refinementField() === field && requestedMode() === mode && (store.refining() || store.suggestion())"
-                [attr.aria-label]="t('knowledge.modes.' + mode) + ' ' + t('knowledge.fields.' + field)"
-                [attr.aria-describedby]="'refinement-help-' + mode + ' refinement-required'"
-                [attr.title]="t('knowledge.modeHints.' + mode)"
-                (click)="refine(field, mode)"
-              >
-                {{ t('knowledge.modes.' + mode) }}
-              </button>
-            }
-          </div>
-          @if (field === 'capture' && !originalFor('capture').trim()) {
-            <p class="knowledge-hint">{{ t('knowledge.captureRefineEmpty') }}</p>
+            {{ t('knowledge.modes.' + mode) }}
+          </button>
           }
-        </section>
-      }
-      @if (refinementField(); as field) {
-        <ng-container
-          [ngTemplateOutlet]="refinementPreview"
-          [ngTemplateOutletContext]="{ field: field }"
-        />
+        </div>
+        @if (field === 'capture' && !originalFor('capture').trim()) {
+        <p class="knowledge-hint">{{ t('knowledge.captureRefineEmpty') }}</p>
+        }
+      </section>
+      } @if (refinementField(); as field) {
+      <ng-container
+        [ngTemplateOutlet]="refinementPreview"
+        [ngTemplateOutletContext]="{ field: field }"
+      />
       }
       <details class="refinement-help">
         <summary>{{ t('knowledge.refinementHelp') }}</summary>
         @for (mode of refinementModes; track mode) {
-          <p [id]="'refinement-help-' + mode">
-            <strong>{{ t('knowledge.modes.' + mode) }}</strong>
-            {{ t('knowledge.modeHints.' + mode) }}
-          </p>
+        <p [id]="'refinement-help-' + mode">
+          <strong>{{ t('knowledge.modes.' + mode) }}</strong>
+          {{ t('knowledge.modeHints.' + mode) }}
+        </p>
         }
       </details>
       <hr />
@@ -323,53 +215,57 @@
   </main>
   <ng-template #refinementPreview let-field="field">
     @if (refinementField() === field) {
-      <div aria-live="polite" [attr.aria-busy]="store.refining()">
-        @if (store.refining()) {
-          <p role="status" class="knowledge-hint">{{ t('knowledge.refining') }} {{ t('knowledge.fields.' + field) }} · {{ t('knowledge.modes.' + requestedMode()) }}</p>
+    <div aria-live="polite" [attr.aria-busy]="store.refining()">
+      @if (store.refining()) {
+      <p role="status" class="knowledge-hint">
+        {{ t('knowledge.refining') }} {{ t('knowledge.fields.' + field) }} · {{
+        t('knowledge.modes.' + requestedMode()) }}
+      </p>
+      } @if (store.refinementError()) {
+      <p role="alert" class="form-alert">{{ t(store.refinementError()) }}</p>
+      } @if (store.suggestion(); as suggestion) {
+      <section class="knowledge-suggestion">
+        <h3 class="refinement-result-heading">
+          {{ t('knowledge.suggestion') }}
+        </h3>
+        <p class="knowledge-hint">
+          {{ t('knowledge.fields.' + field) }} · {{ t('knowledge.modes.' +
+          requestedMode()) }}<br />
+          {{ t('knowledge.reviewHint') }}
+        </p>
+        @if (suggestion.text === originalFor(field)) {
+        <p class="knowledge-hint">{{ t('knowledge.unchanged') }}</p>
         }
-        @if (store.refinementError()) {
-          <p role="alert" class="form-alert">{{ t(store.refinementError()) }}</p>
-        }
-        @if (store.suggestion(); as suggestion) {
-          <section class="knowledge-suggestion">
-            <h3 class="refinement-result-heading">{{ t('knowledge.suggestion') }}</h3>
-            <p class="knowledge-hint">
-              {{ t('knowledge.fields.' + field) }} · {{ t('knowledge.modes.' + requestedMode()) }}<br />
-              {{ t('knowledge.reviewHint') }}
-            </p>
-            @if (suggestion.text === originalFor(field)) {
-              <p class="knowledge-hint">{{ t('knowledge.unchanged') }}</p>
-            }
-            <div class="refinement-comparison">
-              <div>
-                <h4>{{ t('knowledge.original') }}</h4>
-                <p>{{ originalFor(field) }}</p>
-              </div>
-              <div>
-                <h4>{{ t('knowledge.proposed') }}</h4>
-                <p>{{ suggestion.text }}</p>
-              </div>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="button"
-                (click)="accept()"
-                [disabled]="workspaceChanged() || suggestion.text === originalFor(field)"
-              >
-                {{ t('knowledge.accept') }}
-              </button>
-              <button
-                type="button"
-                class="button secondary"
-                (click)="discardRefinement()"
-              >
-                {{ t('knowledge.discard') }}
-              </button>
-            </div>
-          </section>
-        }
-      </div>
+        <div class="refinement-comparison">
+          <div>
+            <h4>{{ t('knowledge.original') }}</h4>
+            <p>{{ originalFor(field) }}</p>
+          </div>
+          <div>
+            <h4>{{ t('knowledge.proposed') }}</h4>
+            <p>{{ suggestion.text }}</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="button"
+            (click)="accept()"
+            [disabled]="workspaceChanged() || suggestion.text === originalFor(field)"
+          >
+            {{ t('knowledge.accept') }}
+          </button>
+          <button
+            type="button"
+            class="button secondary"
+            (click)="discardRefinement()"
+          >
+            {{ t('knowledge.discard') }}
+          </button>
+        </div>
+      </section>
+      }
+    </div>
     }
   </ng-template>
 </ng-container>

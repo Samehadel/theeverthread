@@ -20,15 +20,13 @@ import {
   RefinementMode,
   refinementModes,
   TicketContent,
-  blockTypes,
   canRefineField,
   detailsLength,
   emptyBlock,
-  languages,
   templates,
   validContent,
 } from './knowledge.models';
-import { DetailsView } from './details-view';
+import { DetailsEditor } from './details-editor';
 @Component({
   providers: [KnowledgeStore],
   selector: 'app-capture-page',
@@ -37,7 +35,7 @@ import { DetailsView } from './details-view';
     FormsModule,
     RouterLink,
     TranslocoDirective,
-    DetailsView,
+    DetailsEditor,
   ],
   templateUrl: './capture-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,10 +63,7 @@ export class CapturePage {
   private readonly document = inject(DOCUMENT);
   readonly refinementField = signal<RefinementField | null>(null);
   readonly dirty = signal(false);
-  readonly preview = signal(false);
   readonly templates = templates;
-  readonly languages = languages;
-  readonly blockTypes = blockTypes;
   readonly length = computed(() => detailsLength(this.content().details));
   readonly valid = computed(() => validContent(this.content()));
   readonly locked = computed(
@@ -90,44 +85,10 @@ export class CapturePage {
   update(field: 'title' | 'capture' | 'template', value: string) {
     this.changed();
     this.content.update((c) => ({ ...c, [field]: value }));
-    if (
-      field === 'template' &&
-      value === 'Coding' &&
-      !this.content().details.some((b) => b.type === 'code')
-    )
-      this.add('code');
   }
-  block(index: number, patch: Partial<DetailBlock>) {
+  updateDetails(details: DetailBlock[]) {
     this.changed();
-    this.content.update((c) => ({
-      ...c,
-      details: c.details.map((b, i) => (i === index ? { ...b, ...patch } : b)),
-    }));
-  }
-  add(type: DetailBlock['type']) {
-    this.changed();
-    this.content.update((c) => ({
-      ...c,
-      details: [...c.details, emptyBlock(type)],
-    }));
-  }
-  remove(index: number) {
-    this.changed();
-    this.content.update((c) => ({
-      ...c,
-      details: c.details.filter((_, i) => i !== index),
-    }));
-  }
-  move(index: number, offset: number) {
-    this.changed();
-    this.content.update((c) => {
-      const details = [...c.details];
-      [details[index], details[index + offset]] = [
-        details[index + offset],
-        details[index],
-      ];
-      return { ...c, details };
-    });
+    this.content.update((content) => ({ ...content, details }));
   }
   changed() {
     this.dirty.set(true);
@@ -162,9 +123,11 @@ export class CapturePage {
   }
   discardRefinement() {
     this.store.discard();
-    this.document.getElementById(
-      `refine-${this.refinementField()}-${this.requestedMode()}`,
-    )?.focus();
+    this.document
+      .getElementById(
+        `refine-${this.refinementField()}-${this.requestedMode()}`,
+      )
+      ?.focus();
   }
   accept() {
     const suggestion = this.store.suggestion();
