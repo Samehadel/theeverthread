@@ -187,16 +187,16 @@ test('landing registration, local email verification, password login and logout'
     page.getByRole('link', { name: 'Log in', exact: true }),
   ).toBeVisible();
 });
-test('resend rotates link and invalid link exposes recovery; narrow keyboard-accessible form', async ({
+// Cooldown boundaries and replacement-link validity are covered with a mocked
+// backend clock in RegistrationIntegrationTests.cooldownDoesNotInvalidateAndResendRotatesSameRecord.
+test('narrow keyboard-accessible registration and invalid-link recovery', async ({
   page,
-  request,
 }) => {
-  test.setTimeout(90000);
   const unique = Date.now();
-  const email = `resend-${unique}@example.com`;
+  const email = `recovery-${unique}@example.com`;
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/register');
-  await fillRegistration(page, email, `https://resend-${unique}.co.uk`);
+  await fillRegistration(page, email, `https://recovery-${unique}.co.uk`);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -211,43 +211,14 @@ test('resend rotates link and invalid link exposes recovery; narrow keyboard-acc
   ).toBeVisible({
     timeout: 15000,
   });
-  const old = await latestLink(request, email);
-  const resend = page.getByRole('button', {
-    name: 'Send another verification email',
-  });
-  await expect(resend).toBeEnabled({ timeout: 65000 });
-  const [response] = await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().endsWith('/api/registration/resend'),
-    ),
-    resend.click(),
-  ]);
-  expect(response.status()).toBe(200);
-  expect(response.request().postDataJSON()).toEqual({ email });
-  await expect(
-    page.getByLabel('Email address', { exact: true }),
-  ).toBeDisabled();
-  await expect(resend).toBeDisabled();
-  const replacement = await latestLink(request, email, old);
-  expect(replacement).not.toBe(old);
-  await page.goto(old);
-  await expect(page.getByRole('alert')).toContainText('replaced');
   await expect(
     page.getByRole('button', { name: 'Send another verification email' }),
-  ).toBeVisible();
-  await page.goto(replacement);
-  await expect(page).toHaveURL(/\/knowledge$/);
+  ).toBeDisabled();
+  await page.goto('/verify#invalid');
+  await expect(page.getByRole('alert')).toContainText('missing or invalid');
   await expect(
-    page.getByRole('heading', { name: 'Knowledge', exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Knowledge', exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('link', { name: 'Log in', exact: true }),
-  ).toHaveCount(0);
-  await openAccount(page);
-  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
+    page.getByRole('button', { name: 'Send another verification email' }),
+  ).toBeEnabled();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
