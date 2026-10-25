@@ -126,6 +126,10 @@ for (const viewport of [
         }
         if (path === '/api/knowledge/tickets') {
           const request = route.request().postDataJSON();
+          if (request.content.template === 'Coding') {
+            expect(request.content.details.find((block: any) => block.type === 'code')?.language)
+              .toBe('python');
+          }
           ids.push(request.submissionId);
           published = {
             id: ids.length > 2 ? 'ticket-2' : 'ticket-1',
@@ -181,6 +185,25 @@ for (const viewport of [
       await page.getByRole('button', { name: '</> Code', exact: true }).click();
       await page.keyboard.type('return key;');
       await expect(editor.locator('pre')).toContainText('return key;');
+      const codeLanguage = page.getByRole('combobox', {
+        name: 'Code language', exact: true,
+      });
+      await codeLanguage.focus();
+      await codeLanguage.selectOption('java');
+      await expect(codeLanguage).toHaveValue('java');
+      await expect(editor.locator('pre code')).toHaveClass(/language-java/);
+      await expect(editor.locator('pre .hljs-keyword')).toContainText('return');
+      await codeLanguage.selectOption('plaintext');
+      await expect(editor.locator('pre [class*="hljs-"]')).toHaveCount(0);
+      await codeLanguage.selectOption('java');
+      await expect(codeLanguage).toBeFocused();
+      await codeLanguage.selectOption('python');
+      await expect(codeLanguage).toHaveValue('python');
+      await expect(editor.locator('pre code')).toHaveClass(/language-python/);
+      await expect(editor.locator('pre .hljs-keyword')).toContainText('return');
+      await expect(codeLanguage).toBeFocused();
+      await expect(editor.locator('pre')).toContainText('return key;');
+
       if (viewport.width <= 900) {
         await page
           .getByRole('button', { name: '✧ Refine Title', exact: true })

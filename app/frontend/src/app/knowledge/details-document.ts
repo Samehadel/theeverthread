@@ -1,7 +1,13 @@
 import { JSONContent, Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight } from 'lowlight';
+import { codeGrammars } from './code-highlighting';
+
 import { ListItem } from '@tiptap/extension-list';
 import { DetailBlock, emptyBlock, languages } from './knowledge.models';
+
+const lowlight = createLowlight(codeGrammars);
 
 /** A linked paragraph keeps the existing ticket contract without storing HTML. */
 export const LinkedParagraph = Node.create({
@@ -46,9 +52,10 @@ export function documentExtensions() {
       horizontalRule: false,
       listItem: false,
       orderedList: { keepAttributes: false },
-      codeBlock: { defaultLanguage: 'plaintext' },
+      codeBlock: false,
       undoRedo: { depth: 200 },
     }),
+    CodeBlockLowlight.configure({ lowlight, defaultLanguage: 'plaintext' }),
     // Nested lists cannot be represented in the current ticket contract.
     ListItem.extend({
       content: 'paragraph',

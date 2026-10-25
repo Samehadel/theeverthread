@@ -155,11 +155,9 @@ export class DetailsEditor implements AfterViewInit, OnDestroy {
 
   setLanguage(language: string) {
     if (!this.disabled()) {
-      this.editor
-        ?.chain()
-        .focus()
-        .updateAttributes('codeBlock', { language })
-        .run();
+      // Keep native-select focus so mouse and keyboard selection can finish.
+      // ProseMirror retains the code-block selection while the control has focus.
+      this.editor?.commands.updateAttributes('codeBlock', { language });
     }
   }
 

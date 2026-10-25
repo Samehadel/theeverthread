@@ -2014,19 +2014,19 @@ figure.knowledge-code {
     Consolas,
     monospace;
 }
-.knowledge-code .hljs-keyword,
-.knowledge-code .hljs-selector-tag {
+:is(.knowledge-code, .document-canvas pre) .hljs-keyword,
+:is(.knowledge-code, .document-canvas pre) .hljs-selector-tag {
   color: #c5b3ff;
 }
-.knowledge-code .hljs-string,
-.knowledge-code .hljs-attr {
+:is(.knowledge-code, .document-canvas pre) .hljs-string,
+:is(.knowledge-code, .document-canvas pre) .hljs-attr {
   color: #b3dfbc;
 }
-.knowledge-code .hljs-comment {
+:is(.knowledge-code, .document-canvas pre) .hljs-comment {
   color: #9a9cad;
 }
-.knowledge-code .hljs-number,
-.knowledge-code .hljs-literal {
+:is(.knowledge-code, .document-canvas pre) .hljs-number,
+:is(.knowledge-code, .document-canvas pre) .hljs-literal {
   color: #edc395;
 }
 .knowledge-ticket {
@@ -2568,4 +2568,17 @@ figure.knowledge-code {
     top: 22px;
     left: 18px;
   }
+}
+
+:is(.knowledge-code, .document-canvas pre) .hljs-title,
+:is(.knowledge-code, .document-canvas pre) .hljs-built_in {
+  color: #9bd6ed;
+}
+:is(.knowledge-code, .document-canvas pre) .hljs-type,
+:is(.knowledge-code, .document-canvas pre) .hljs-symbol {
+  color: #edc395;
+}
+:is(.knowledge-code, .document-canvas pre) .hljs-variable,
+:is(.knowledge-code, .document-canvas pre) .hljs-tag {
+  color: #efa9b4;
 }
