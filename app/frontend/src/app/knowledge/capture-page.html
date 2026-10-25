@@ -32,6 +32,10 @@
                 >{{ t("knowledge.fields.title") }}
                 <span>{{ t("knowledge.required") }}</span></label
               >
+              <button type="button" class="text-link refinement-shortcut"
+                (click)="showRefinement('title')">
+                ✧ {{ t("knowledge.refineTitle") }}
+              </button>
             </div>
             <input
               id="ticket-title"
@@ -46,10 +50,6 @@
               {{ t("knowledge.titleHint") }}
               <span>{{ content().title.length }}/200</span>
             </p>
-            <ng-container
-              [ngTemplateOutlet]="refinementControls"
-              [ngTemplateOutletContext]="{ field: 'title' }"
-            />
           </div>
           <div class="knowledge-field">
             <div class="knowledge-label">
@@ -57,6 +57,10 @@
                 >{{ t("knowledge.fields.capture") }}
                 <span>{{ t("knowledge.optional") }}</span></label
               >
+              <button type="button" class="text-link refinement-shortcut"
+                (click)="showRefinement('capture')">
+                ✧ {{ t("knowledge.refineCapture") }}
+              </button>
             </div>
             <textarea
               id="ticket-capture"
@@ -71,10 +75,6 @@
               {{ t("knowledge.captureHint") }}
               <span>{{ content().capture?.length ?? 0 }}/1,000</span>
             </p>
-            <ng-container
-              [ngTemplateOutlet]="refinementControls"
-              [ngTemplateOutletContext]="{ field: 'capture' }"
-            />
           </div>
           <div class="knowledge-label">
             <label for="writing-template">{{ t("knowledge.template") }}</label
@@ -259,24 +259,60 @@
       <p class="eyebrow">{{ t("knowledge.beforeShare") }}</p>
       <h2>{{ t("knowledge.polish") }}</h2>
       <p>{{ t("knowledge.polishIntro") }}</p>
-      <div class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="button secondary"
-          [disabled]="!canRefine('title')"
-          (click)="refine('title')"
+      <p id="refinement-required" class="refinement-required">
+        @if (!valid()) {
+          {{ t('knowledge.refinementRequired') }}
+        }
+      </p>
+      @for (field of refinementFields; track field) {
+        <section
+          class="refinement-group"
+          tabindex="-1"
+          [id]="'refinement-' + field"
+          [attr.aria-labelledby]="'refinement-heading-' + field"
         >
-          {{ t("knowledge.refineTitle") }}
-        </button>
-        <button
-          type="button"
-          class="button secondary"
-          [disabled]="!canRefine('capture')"
-          (click)="refine('capture')"
-        >
-          {{ t("knowledge.refineCapture") }}
-        </button>
-      </div>
+          <h3 [id]="'refinement-heading-' + field">{{ t('knowledge.fields.' + field) }}</h3>
+          <div
+            class="refinement-options"
+            role="group"
+            [attr.aria-label]="t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture')"
+          >
+            @for (mode of refinementModes; track mode) {
+              <button
+                type="button"
+                class="refinement-option"
+                [id]="'refine-' + field + '-' + mode"
+                [disabled]="!canRefine(field)"
+                [class.is-active]="refinementField() === field && requestedMode() === mode && (store.refining() || store.suggestion())"
+                [attr.aria-label]="t('knowledge.modes.' + mode) + ' ' + t('knowledge.fields.' + field)"
+                [attr.aria-describedby]="'refinement-help-' + mode + ' refinement-required'"
+                [attr.title]="t('knowledge.modeHints.' + mode)"
+                (click)="refine(field, mode)"
+              >
+                {{ t('knowledge.modes.' + mode) }}
+              </button>
+            }
+          </div>
+          @if (field === 'capture' && !originalFor('capture').trim()) {
+            <p class="knowledge-hint">{{ t('knowledge.captureRefineEmpty') }}</p>
+          }
+        </section>
+      }
+      @if (refinementField(); as field) {
+        <ng-container
+          [ngTemplateOutlet]="refinementPreview"
+          [ngTemplateOutletContext]="{ field: field }"
+        />
+      }
+      <details class="refinement-help">
+        <summary>{{ t('knowledge.refinementHelp') }}</summary>
+        @for (mode of refinementModes; track mode) {
+          <p [id]="'refinement-help-' + mode">
+            <strong>{{ t('knowledge.modes.' + mode) }}</strong>
+            {{ t('knowledge.modeHints.' + mode) }}
+          </p>
+        }
+      </details>
       <hr />
       <h3>{{ t("knowledge.workspaceVisibility") }}</h3>
       <p>{{ t("knowledge.workspaceHint") }}</p>
@@ -285,58 +321,21 @@
       <p class="knowledge-hint">{{ t("knowledge.externalAi") }}</p>
     </aside>
   </main>
-  <ng-template #refinementControls let-field="field">
-    <fieldset
-      class="refinement-controls"
-      [disabled]="locked() || workspaceChanged()"
-    >
-      <legend>
-        {{ t('knowledge.transformation') }} · {{ t('knowledge.fields.' + field) }}
-      </legend>
-      <div class="refinement-options">
-        @for (mode of refinementModes; track mode) {
-          <label
-            class="refinement-option"
-            [class.is-selected]="modeFor(field) === mode"
-          >
-            <input
-              type="radio"
-              [name]="'refinement-' + field"
-              [value]="mode"
-              [checked]="modeFor(field) === mode"
-              (change)="selectRefinementMode(field, mode)"
-              [attr.aria-describedby]="field + '-mode-hint'"
-            />
-            <span>{{ t('knowledge.modes.' + mode) }}</span>
-          </label>
-        }
-      </div>
-      <p class="knowledge-hint" [id]="field + '-mode-hint'">
-        {{ t('knowledge.modeHints.' + modeFor(field)) }}
-      </p>
-    </fieldset>
-    <button
-      type="button"
-      class="button secondary refinement-action"
-      [disabled]="!canRefine(field)"
-      (click)="refine(field)"
-      [attr.aria-describedby]="field + '-mode-hint'"
-    >
-      ✧ {{ t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture') }}
-    </button>
+  <ng-template #refinementPreview let-field="field">
     @if (refinementField() === field) {
       <div aria-live="polite" [attr.aria-busy]="store.refining()">
         @if (store.refining()) {
-          <p role="status" class="knowledge-hint">{{ t('knowledge.refining') }}</p>
+          <p role="status" class="knowledge-hint">{{ t('knowledge.refining') }} {{ t('knowledge.fields.' + field) }} · {{ t('knowledge.modes.' + requestedMode()) }}</p>
         }
         @if (store.refinementError()) {
           <p role="alert" class="form-alert">{{ t(store.refinementError()) }}</p>
         }
         @if (store.suggestion(); as suggestion) {
           <section class="knowledge-suggestion">
-            <h3>{{ t('knowledge.suggestion') }}</h3>
+            <h3 class="refinement-result-heading">{{ t('knowledge.suggestion') }}</h3>
             <p class="knowledge-hint">
-              {{ t('knowledge.modes.' + modeFor(field)) }} · {{ t('knowledge.reviewHint') }}
+              {{ t('knowledge.fields.' + field) }} · {{ t('knowledge.modes.' + requestedMode()) }}<br />
+              {{ t('knowledge.reviewHint') }}
             </p>
             @if (suggestion.text === originalFor(field)) {
               <p class="knowledge-hint">{{ t('knowledge.unchanged') }}</p>
@@ -363,7 +362,7 @@
               <button
                 type="button"
                 class="button secondary"
-                (click)="store.discard()"
+                (click)="discardRefinement()"
               >
                 {{ t('knowledge.discard') }}
               </button>

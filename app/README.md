@@ -311,10 +311,11 @@ the proposed decision is in `architecture/decisions/0005-session-refresh.md`.
 ## Knowledge capture and monitoring
 
 Active members and administrators can open **Capture knowledge** from Knowledge. Title and Details are required; Capture is optional. Refine Title or Capture
-independently, choosing Proofread (mechanics), Rephrase (clarity, the UI default),
-or Rewrite (substantial restructuring). Compare the original and suggestion beside
-the field and explicitly accept or discard. Each field keeps its own choice for the
-writing session; changing the active mode clears its previous suggestion. The API
+independently using the side panel's Proofread (mechanics), Rephrase (clarity),
+or Rewrite (substantial restructuring) action buttons. Clicking an action immediately
+requests a suggestion for that field. Compare the original and suggestion in the
+same panel and explicitly accept or discard. Field shortcuts reach the corresponding
+panel section on mobile; accepting returns focus to the updated field. The API
 accepts an optional `mode`; omission retains Proofread for older clients. Refinement
 uses only the selected field's existing text; blank Capture cannot be refined. Prompts live
 in backend `resources/prompts/knowledge/*.st`. Details are never refinement context.
