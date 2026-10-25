@@ -143,8 +143,9 @@ Both must succeed before the `verify` job downloads the tested JAR, installs
 Chromium's headless shell, starts the local stack, and runs browser checks.
 Publishing waits for `verify` and uses the original `backend-jar` and
 `frontend-browser` artifacts. Backend and browser failures upload reports from
-the runner where they occurred. Browser checks retain the real registration
-resend cooldown. PR checks run when a PR is opened, updated, or reopened.
+the runner where they occurred. Registration resend cooldown boundaries and
+replacement links are covered by backend integration tests with a mocked clock.
+PR checks run when a PR is opened, updated, or reopened.
 
 To intentionally refresh dependency locks after editing versions, run `./gradlew dependencies --write-locks` in `backend/` and `npm install` in `frontend/`, then review lockfile changes and rerun checks.
 
