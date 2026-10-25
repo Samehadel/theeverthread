@@ -28,7 +28,7 @@ public class SpringAiKnowledgeAi implements KnowledgeAi {
     public record Wording(String text) {}
 
     @Override
-    public String refine(String original, String field) {
+    public String refine(String original, String field, RefinementMode mode) {
         Resource prompt = "title".equals(field) ? TITLE_PROMPT : CAPTURE_PROMPT;
         var result =
                 knowledgeChatClient
@@ -37,10 +37,11 @@ public class SpringAiKnowledgeAi implements KnowledgeAi {
                                 system ->
                                         system.text(prompt)
                                                 .param("inputLength", original.length())
+                                                .param("transformation", RefinementRules.instruction(mode))
                                                 .param(
                                                         "maxCharacters",
                                                         RefinementRules.maxCharacters(
-                                                                original, field)))
+                                                                original, field, mode)))
                         .user(json.writeValueAsString(Map.of("text", original)))
                         .call()
                         .entity(Wording.class, spec -> spec.useProviderStructuredOutput());

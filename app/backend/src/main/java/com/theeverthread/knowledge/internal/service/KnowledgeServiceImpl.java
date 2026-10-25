@@ -117,12 +117,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             TicketRules.invalid("Choose Title or Capture for refinement.");
         }
         TicketRules.validate(request.content());
+        var mode = request.mode();
         String original = RefinementRules.original(request.content(), request.field());
         try {
-            var text = ai.refine(original, request.field());
+            var text = ai.refine(original, request.field(), mode);
             TicketRules.text(
                     text,
-                    RefinementRules.maxCharacters(original, request.field()),
+                    RefinementRules.maxCharacters(original, request.field(), mode),
                     "Suggested wording");
             return new RefinementView(request.field(), text);
         } catch (RuntimeException exception) {

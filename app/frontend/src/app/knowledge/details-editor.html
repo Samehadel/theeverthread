@@ -1,0 +1,139 @@
+<ng-container *transloco="let t">
+  <div
+    class="knowledge-editor document-editor"
+    [class.is-disabled]="disabled()"
+  >
+    <div
+      class="document-toolbar"
+      (mousedown)="$event.preventDefault()"
+      role="group"
+      [attr.aria-label]="t('knowledge.editor.formatting')"
+    >
+      <div class="document-tools">
+        <button
+          type="button"
+          [disabled]="disabled()"
+          [attr.aria-pressed]="active('paragraph')"
+          (click)="format('paragraph')"
+        >
+          {{ t('knowledge.blocks.paragraph') }}
+        </button>
+        <button
+          type="button"
+          [disabled]="disabled()"
+          [attr.aria-pressed]="active('heading')"
+          (click)="format('heading')"
+        >
+          {{ t('knowledge.blocks.heading') }}
+        </button>
+        <span class="document-divider" aria-hidden="true"></span>
+        <button
+          type="button"
+          [disabled]="disabled()"
+          [attr.aria-pressed]="active('bulletList')"
+          (click)="format('bulletList')"
+        >
+          • {{ t('knowledge.blocks.bulletList') }}
+        </button>
+        <button
+          type="button"
+          [disabled]="disabled()"
+          [attr.aria-pressed]="active('orderedList')"
+          (click)="format('orderedList')"
+        >
+          1. {{ t('knowledge.blocks.orderedList') }}
+        </button>
+        <button
+          type="button"
+          [disabled]="disabled()"
+          [attr.aria-pressed]="active('codeBlock')"
+          (click)="format('codeBlock')"
+        >
+          &lt;/&gt; {{ t('knowledge.blocks.code') }}
+        </button>
+        <button
+          type="button"
+          [disabled]="disabled() || active('bulletList') || active('orderedList') || active('codeBlock')"
+          [attr.aria-expanded]="linking()"
+          (click)="showLink()"
+        >
+          ↗ {{ t('knowledge.blocks.link') }}
+        </button>
+      </div>
+      <div class="document-history">
+        <button
+          type="button"
+          [disabled]="!canHistory('undo')"
+          [attr.aria-label]="t('knowledge.editor.undo')"
+          [title]="t('knowledge.editor.undo')"
+          (click)="history('undo')"
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          [disabled]="!canHistory('redo')"
+          [attr.aria-label]="t('knowledge.editor.redo')"
+          [title]="t('knowledge.editor.redo')"
+          (click)="history('redo')"
+        >
+          ↷
+        </button>
+      </div>
+    </div>
+    @if (linking()) {
+    <div class="document-link" (keydown.escape)="cancelLink()">
+      <label
+        >{{ t('knowledge.editor.linkText') }}<input
+          #linkInput
+          name="document-link-text"
+          (keydown.enter)="$event.preventDefault(); saveLink()"
+          [(ngModel)]="linkText"
+          [ngModelOptions]="{standalone: true}"
+      /></label>
+      <label
+        >{{ t('knowledge.url') }}<input
+          name="document-link-url"
+          type="url"
+          placeholder="https://"
+          [(ngModel)]="linkUrl"
+          [ngModelOptions]="{standalone: true}"
+          (keydown.enter)="$event.preventDefault(); saveLink()"
+      /></label>
+      <button type="button" class="button secondary" (click)="saveLink()">
+        {{ t('knowledge.editor.saveLink') }}
+      </button>
+      <button type="button" class="text-link" (click)="cancelLink()">
+        {{ t('knowledge.cancel') }}
+      </button>
+      @if (linkError()) {
+      <p role="alert" class="field-error">
+        {{ t('knowledge.editor.linkError') }}
+      </p>
+      }
+    </div>
+    } @if (active('codeBlock')) {
+    <div class="document-language">
+      <label for="document-language">{{ t('knowledge.language') }}</label>
+      <select
+        id="document-language"
+        [disabled]="disabled()"
+        [ngModel]="language()"
+        [ngModelOptions]="{standalone: true}"
+        (ngModelChange)="setLanguage($event)"
+      >
+        @for (language of languages; track language) {
+        <option [value]="language">{{ language }}</option>
+        }
+      </select>
+    </div>
+    }
+    <div
+      #canvas
+      [attr.data-placeholder]="t('knowledge.editor.placeholder')"
+    ></div>
+    <p id="document-help" class="document-help">
+      {{ t('knowledge.editor.help') }}
+    </p>
+  </div>
+</ng-container>

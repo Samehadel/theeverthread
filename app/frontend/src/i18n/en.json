@@ -300,15 +300,15 @@
     "moveDown": "Move block down",
     "preview": "Preview Details",
     "hidePreview": "Hide preview",
-    "aiHint": "Rephrase existing Title or Capture wording independently. Keep the same meaning and a similar length. Enter text in a field before refining it.",
+    "aiHint": "Use the side panel to proofread, rephrase, or rewrite your Title and Capture. Review each suggestion before accepting.",
     "visibility": "Visible to your workspace",
     "autoAttributes": "Attributes are added automatically after publishing.",
     "publish": "Publish ticket",
     "publishing": "Publishing…",
     "beforeShare": "Before you share",
-    "polish": "A little polish.",
-    "polishIntro": "Polish only what you wrote in Title or Capture. Suggestions stay concise and preserve your meaning.",
-    "refining": "Refining…",
+    "polish": "Make it say what you mean.",
+    "polishIntro": "Choose an action for Title or Capture. One click prepares a suggestion; your original stays until you accept.",
+    "refining": "Refining",
     "refineTitle": "Refine Title",
     "refineCapture": "Refine Capture",
     "suggestion": "Suggested wording",
@@ -351,7 +351,36 @@
     "browseLoading": "Loading knowledge…",
     "browseError": "Knowledge could not be loaded. Please retry.",
     "detailRefreshError": "This ticket could not be refreshed. The loaded content is still available. Please retry.",
-    "workspaceChanged": "Workspace access changed. This draft stays in its original workspace and cannot be published here. Copy any writing you need before leaving."
+    "workspaceChanged": "Workspace access changed. This draft stays in its original workspace and cannot be published here. Copy any writing you need before leaving.",
+    "modes": {
+      "proofread": "Proofread",
+      "rephrase": "Rephrase",
+      "rewrite": "Rewrite"
+    },
+    "modeHints": {
+      "proofread": "Light touch. Fix spelling, grammar, and punctuation; keep your wording and structure.",
+      "rephrase": "A clearer expression. Improve wording and flow while staying close to your original.",
+      "rewrite": "A fresh expression. Reshape the whole sentence while keeping your facts and intent."
+    },
+    "reviewHint": "Same facts and intent. Review before accepting.",
+    "original": "Your original",
+    "proposed": "Proposed wording",
+    "unchanged": "No changes needed at this level. Choose another action for a different approach.",
+    "refinementHelp": "What will each action change?",
+    "refinementRequired": "Complete the required fields to enable refinement.",
+    "captureRefineEmpty": "Add Capture text to refine it.",
+    "editor": {
+      "formatting": "Details formatting",
+      "undo": "Undo",
+      "redo": "Redo",
+      "placeholder": "Start writing your knowledge…",
+      "help": "Write naturally. Try ## for a heading, - for a list, or ``` for code. Undo with ⌘Z / Ctrl+Z.",
+      "linkText": "Link text",
+      "saveLink": "Apply link",
+      "linkError": "Enter link text and a valid https:// or http:// address.",
+      "tooManyBlocks": "Keep your document to 200 paragraphs or sections.",
+      "codingHint": "Coding needs a code section. Choose Code in the toolbar or type ```."
+    }
   },
   "workspace": {
     "navigation": "Workspace navigation",
