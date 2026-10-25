@@ -1,9 +1,9 @@
 name: theeverthread checks and deployment
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    types: [opened]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 permissions:
   contents: read
