@@ -47,6 +47,13 @@ class ApiExceptionHandler {
                 .body(ApiEnvelope.failure("INVALID_REQUEST", "Invalid request parameter."));
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ApiEnvelope<Void>> invalidBody(
+            org.springframework.http.converter.HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest()
+                .body(ApiEnvelope.failure("INVALID_REQUEST", "Invalid request body."));
+    }
+
     @ExceptionHandler(DataAccessException.class)
     ResponseEntity<ApiEnvelope<Void>> unavailable(DataAccessException exception) {
         LOG.warn("Database readiness check failed", exception);

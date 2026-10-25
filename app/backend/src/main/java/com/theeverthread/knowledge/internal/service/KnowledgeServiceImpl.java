@@ -117,7 +117,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             TicketRules.invalid("Choose Title or Capture for refinement.");
         }
         TicketRules.validate(request.content());
-        String mode = RefinementRules.mode(request.mode());
+        var mode = request.mode();
         String original = RefinementRules.original(request.content(), request.field());
         try {
             var text = ai.refine(original, request.field(), mode);

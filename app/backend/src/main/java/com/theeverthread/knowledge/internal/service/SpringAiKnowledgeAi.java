@@ -28,7 +28,7 @@ public class SpringAiKnowledgeAi implements KnowledgeAi {
     public record Wording(String text) {}
 
     @Override
-    public String refine(String original, String field, String mode) {
+    public String refine(String original, String field, RefinementMode mode) {
         Resource prompt = "title".equals(field) ? TITLE_PROMPT : CAPTURE_PROMPT;
         var result =
                 knowledgeChatClient

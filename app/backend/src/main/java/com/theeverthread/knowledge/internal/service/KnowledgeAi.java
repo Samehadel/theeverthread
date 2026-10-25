@@ -6,10 +6,10 @@ import java.util.List;
 
 public interface KnowledgeAi {
     default String refine(String original, String field) {
-        return refine(original, field, "proofread");
+        return refine(original, field, RefinementMode.PROOFREAD);
     }
 
-    String refine(String original, String field, String mode);
+    String refine(String original, String field, RefinementMode mode);
 
     List<String> classify(TicketContent content);
 }

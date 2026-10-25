@@ -2,6 +2,7 @@ package com.theeverthread.knowledge;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.theeverthread.knowledge.api.dto.RefinementMode;
 import com.theeverthread.knowledge.api.dto.TicketContent;
 import com.theeverthread.knowledge.internal.service.SpringAiKnowledgeAi;
 import com.sun.net.httpserver.HttpServer;
@@ -94,7 +95,7 @@ class SpringAiKnowledgeAiTests {
                                     new TicketContent.DetailBlock(
                                             "code", "return key;", "java", null)));
             assertThat(ai.refine(content.title(), "title")).isEqualTo("Retry safely");
-            assertThat(ai.refine(content.capture(), "capture", "rewrite")).isEqualTo("Use a stable key.");
+            assertThat(ai.refine(content.capture(), "capture", RefinementMode.REWRITE)).isEqualTo("Use a stable key.");
             assertThat(ai.classify(content)).containsExactly("area:backend");
             for (var request : requests) {
                 var payload = json.readTree(request);

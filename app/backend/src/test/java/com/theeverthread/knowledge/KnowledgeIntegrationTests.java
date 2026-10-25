@@ -500,14 +500,14 @@ class KnowledgeIntegrationTests {
 
     @Test
     void refinementRephrasesOnlyExistingSelectedTextAndNeverMutatesPublication() {
-        when(ai.refine(content().title(), "title", "proofread")).thenReturn("Safe retries");
+        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD)).thenReturn("Safe retries");
         var result =
                 knowledge.refine(
                         "member@example.com",
                         workspaceFor("member@example.com"),
                         new RefinementRequest("title", content()));
         assertThat(result).isEqualTo(new RefinementView("title", "Safe retries"));
-        verify(ai).refine(content().title(), "title", "proofread");
+        verify(ai).refine(content().title(), "title", RefinementMode.PROOFREAD);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM KNOWLEDGE_TICKET", Integer.class))
                 .isZero();
         var withoutCapture =
@@ -520,8 +520,8 @@ class KnowledgeIntegrationTests {
                                         new RefinementRequest("capture", withoutCapture)))
                 .isInstanceOfSatisfying(
                         KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(400));
-        verify(ai, never()).refine(eq(""), anyString(), anyString());
-        when(ai.refine(content().title(), "title", "proofread")).thenThrow(new IllegalStateException("offline"));
+        verify(ai, never()).refine(eq(""), anyString(), any(RefinementMode.class));
+        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD)).thenThrow(new IllegalStateException("offline"));
         assertThatThrownBy(
                         () ->
                                 knowledge.refine(
@@ -542,22 +542,18 @@ class KnowledgeIntegrationTests {
     }
 
     @Test
-    void selectedModeReachesProviderAndUnknownModesNeverDo() {
-        when(ai.refine(content().title(), "title", "rewrite"))
+    void selectedModeReachesProvider() {
+        when(ai.refine(content().title(), "title", RefinementMode.REWRITE))
                 .thenReturn("Make every retry safe with a stable key");
         var result = knowledge.refine("member@example.com", workspaceFor("member@example.com"),
-                new RefinementRequest("title", content(), "rewrite"));
+                new RefinementRequest("title", content(), RefinementMode.REWRITE));
         assertThat(result.text()).isEqualTo("Make every retry safe with a stable key");
-        verify(ai).refine(content().title(), "title", "rewrite");
-        assertThatThrownBy(() -> knowledge.refine("member@example.com", workspaceFor("member@example.com"),
-                new RefinementRequest("title", content(), "invent")))
-                .isInstanceOfSatisfying(KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(400));
-        verify(ai, never()).refine(anyString(), anyString(), eq("invent"));
+        verify(ai).refine(content().title(), "title", RefinementMode.REWRITE);
     }
 
     @Test
     void rejectsRefinementThatExpandsFarBeyondTheOriginalWording() {
-        when(ai.refine(content().capture(), "capture", "proofread"))
+        when(ai.refine(content().capture(), "capture", RefinementMode.PROOFREAD))
                 .thenReturn(
                         "A long new explanation with facts and suggestions that the user never entered. "
                                 .repeat(4));
@@ -594,8 +590,48 @@ class KnowledgeIntegrationTests {
     }
 
     @Test
+    void refinementModeBindsAtHttpBoundaryAndDefaultsWhenOmitted() throws Exception {
+        for (var mode : RefinementMode.values()) {
+            when(ai.refine(content().title(), "title", mode)).thenReturn("Safe retries");
+            mvc.perform(post("/api/knowledge/tickets/refine")
+                            .with(user("member@example.com").roles("MEMBER"))
+                            .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                            .with(csrf())
+                            .contentType("application/json")
+                            .content(json.writeValueAsString(Map.of(
+                                    "field", "title", "content", content(),
+                                    "mode", mode.name().toLowerCase(java.util.Locale.ROOT)))))
+                    .andExpect(status().isOk());
+            verify(ai).refine(content().title(), "title", mode);
+        }
+        clearInvocations(ai);
+        mvc.perform(post("/api/knowledge/tickets/refine")
+                        .with(user("member@example.com").roles("MEMBER"))
+                        .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(json.writeValueAsString(Map.of(
+                                "field", "title", "content", content(), "mode", "invent"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isInstanceOf(org.springframework.http.converter.HttpMessageNotReadableException.class));
+        verifyNoInteractions(ai);
+        mvc.perform(post("/api/knowledge/tickets/refine")
+                        .with(user("member@example.com").roles("MEMBER"))
+                        .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                        .with(csrf())
+                        .contentType("application/json")
+                        .content(json.writeValueAsString(Map.of("field", "title", "content", content()))))
+                .andExpect(status().isOk());
+        verify(ai).refine(content().title(), "title", RefinementMode.PROOFREAD);
+        assertThat(new RefinementRequest("title", content(), null).mode())
+                .isEqualTo(RefinementMode.PROOFREAD);
+    }
+
+    @Test
     void refinementTransportReturnsOnlySelectedFieldAndRejectsDetails() throws Exception {
-        when(ai.refine(content().capture(), "capture", "proofread")).thenReturn("Reuse a stable key.");
+        when(ai.refine(content().capture(), "capture", RefinementMode.PROOFREAD)).thenReturn("Reuse a stable key.");
         mvc.perform(
                         post("/api/knowledge/tickets/refine")
                                 .with(user("member@example.com").roles("MEMBER"))

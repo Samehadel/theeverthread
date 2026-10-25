@@ -1671,7 +1671,7 @@ components:
         meaning without adding facts. Proofread allows the original trimmed length plus 20 percent (rounded up),
         minimum four extra characters. Rephrase allows 50 percent growth (rounded up), minimum 20 extra characters.
         Rewrite allows 100 percent growth, minimum 60 extra characters. All modes respect the field limit.
-        Unknown modes fail validation before contacting the provider.
+        Unknown modes are rejected during controller request deserialization, before service invocation.
     Workspace:
       type: object
       required:
