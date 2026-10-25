@@ -106,7 +106,13 @@ for (const viewport of [
       await page
         .getByLabel('Writing template', { exact: true })
         .selectOption('Coding');
-      await page.getByLabel('Code 2', { exact: true }).fill('return personal;');
+      const editor = page.getByRole('textbox', { name: 'Details Required' });
+      await editor.fill('Code captured in my personal workspace.');
+      await editor.press('End');
+      await editor.press('Enter');
+      await page.getByRole('button', { name: '</> Code', exact: true }).click();
+      await page.keyboard.type('return personal;');
+      await expect(editor.locator('pre')).toContainText('return personal;');
       await page
         .getByRole('button', { name: 'Publish ticket', exact: true })
         .click();
