@@ -137,6 +137,12 @@ Backend coverage includes real startup/migration history, HTTP envelopes and exc
 
 Reports: `backend/build/reports/tests/test/index.html`, `backend/build/reports/jacoco/test/html/index.html`, and Playwright failure traces in `frontend/test-results/`. CI executes the same checks on Linux, installs Chromium, starts the packaged backend with PostgreSQL, and verifies browser communication.
 
+CI overlaps backend checks and JAR packaging with frontend checks, the production
+build, and installation of Chromium's headless shell. Both groups must succeed
+before browser verification starts; either group's failure fails `verify`. This
+keeps the existing artifact handoff to publishing without extra runner setup or
+artifact downloads. Browser checks retain the real registration resend cooldown.
+
 To intentionally refresh dependency locks after editing versions, run `./gradlew dependencies --write-locks` in `backend/` and `npm install` in `frontend/`, then review lockfile changes and rerun checks.
 
 ## Troubleshooting

@@ -26,17 +26,39 @@ jobs:
         run: |
           node --test scripts/version.test.mjs
           node scripts/version.mjs --check
-      - name: Backend checks and executable JAR
-        working-directory: app/backend
-        run: ./gradlew check bootJar --no-daemon
-      - name: Frontend checks and production build
-        working-directory: app/frontend
+      - name: Backend and frontend checks in parallel
+        shell: bash
         run: |
-          npm ci
-          npm test
-          npm run typecheck
-          npm run build
-          npx playwright install --with-deps chromium
+          # These checks have independent inputs and outputs. Browser verification
+          # below still waits for both, and publishing uses these same artifacts.
+          (
+            set -e
+            cd app/backend
+            ./gradlew check bootJar --no-daemon
+          ) &
+          backend_checks_pid=$!
+          (
+            set -e
+            cd app/frontend
+            npm ci
+            npm test
+            npm run typecheck
+            npm run build
+            npx playwright install --with-deps --only-shell chromium
+          ) &
+          frontend_checks_pid=$!
+
+          # Wait for both even if one fails, so all diagnostics are collected.
+          checks_status=0
+          if ! wait "$backend_checks_pid"; then
+            echo '::error::Backend checks failed'
+            checks_status=1
+          fi
+          if ! wait "$frontend_checks_pid"; then
+            echo '::error::Frontend checks or browser installation failed'
+            checks_status=1
+          fi
+          exit "$checks_status"
       - name: Start local stack and verify browser communication
         working-directory: app
         env:
