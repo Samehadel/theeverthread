@@ -8,6 +8,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TranslocoDirective } from '@jsverse/transloco';
@@ -16,6 +17,8 @@ import { KnowledgeStore } from './knowledge.store';
 import {
   DetailBlock,
   RefinementField,
+  RefinementMode,
+  refinementModes,
   TicketContent,
   blockTypes,
   canRefineField,
@@ -29,7 +32,13 @@ import { DetailsView } from './details-view';
 @Component({
   providers: [KnowledgeStore],
   selector: 'app-capture-page',
-  imports: [FormsModule, RouterLink, TranslocoDirective, DetailsView],
+  imports: [
+    NgTemplateOutlet,
+    FormsModule,
+    RouterLink,
+    TranslocoDirective,
+    DetailsView,
+  ],
   templateUrl: './capture-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -50,6 +59,11 @@ export class CapturePage {
     template: 'Knowledge',
     details: [emptyBlock('paragraph')],
   });
+  readonly refinementModes = refinementModes;
+  readonly refinementFields: readonly RefinementField[] = ['title', 'capture'];
+  readonly requestedMode = signal<RefinementMode>('rephrase');
+  private readonly document = inject(DOCUMENT);
+  readonly refinementField = signal<RefinementField | null>(null);
   readonly dirty = signal(false);
   readonly preview = signal(false);
   readonly templates = templates;
@@ -126,19 +140,38 @@ export class CapturePage {
       canRefineField(this.content(), field)
     );
   }
-  refine(field: RefinementField) {
-    if (this.canRefine(field))
+  showRefinement(field: RefinementField) {
+    const group = this.document.getElementById(`refinement-${field}`);
+    group?.scrollIntoView({ block: 'start' });
+    group?.focus({ preventScroll: true });
+  }
+  originalFor(field: RefinementField) {
+    return this.content()[field] ?? '';
+  }
+  refine(field: RefinementField, mode: RefinementMode) {
+    if (this.canRefine(field)) {
+      this.refinementField.set(field);
+      this.requestedMode.set(mode);
       this.store.refine({
         content: this.content(),
         field,
+        mode,
         workspaceId: this.originWorkspaceId!,
       });
+    }
+  }
+  discardRefinement() {
+    this.store.discard();
+    this.document.getElementById(
+      `refine-${this.refinementField()}-${this.requestedMode()}`,
+    )?.focus();
   }
   accept() {
     const suggestion = this.store.suggestion();
-    if (!suggestion) return;
+    if (!suggestion || this.workspaceChanged()) return;
     this.content.update((c) => ({ ...c, [suggestion.field]: suggestion.text }));
     this.changed();
+    this.document.getElementById(`ticket-${suggestion.field}`)?.focus();
   }
   publish() {
     if (

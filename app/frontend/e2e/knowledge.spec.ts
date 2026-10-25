@@ -13,6 +13,7 @@ for (const viewport of [
       let publishFails = true;
       let published: any;
       const ids: string[] = [];
+      const refinements: { field: string; mode: string }[] = [];
       await page.route('**/api/**', async (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path === '/api/auth/me' || path.startsWith('/api/workspaces/'))
@@ -33,6 +34,9 @@ for (const viewport of [
             json: { data: { token: 'csrf', headerName: 'X-CSRF-TOKEN' } },
           });
         if (path.endsWith('/refine')) {
+          const { field, mode } = route.request().postDataJSON();
+          refinements.push({ field, mode });
+          expect(['proofread', 'rephrase', 'rewrite']).toContain(mode);
           expect(
             route.request().postDataJSON().content.details[1].text,
           ).toContain('return key;');
@@ -45,7 +49,6 @@ for (const viewport of [
                 },
               },
             });
-          const field = route.request().postDataJSON().field;
           expect(['title', 'capture']).toContain(field);
           return route.fulfill({
             json: {
@@ -80,12 +83,16 @@ for (const viewport of [
         return route.fulfill({ status: 404 });
       });
       await page.goto('/knowledge/new');
+      const actions = page.locator('.refinement-options button');
+      await expect(actions).toHaveCount(6);
+      for (const action of await actions.all()) await expect(action).toBeDisabled();
+      await expect(page.getByRole('radio')).toHaveCount(0);
       await expect(
         page.getByRole('button', { name: 'Publish ticket', exact: true }),
       ).toBeDisabled();
       await expect(
         page.getByRole('complementary').getByRole('button', {
-          name: 'Refine Title',
+          name: 'Rewrite Title',
           exact: true,
         }),
       ).toBeDisabled();
@@ -109,9 +116,13 @@ for (const viewport of [
       await expect(page.locator('app-details-view pre')).toContainText(
         'return key;',
       );
+      if (viewport.width <= 900) {
+        await page.getByRole('button', { name: '✧ Refine Title', exact: true }).click();
+        await expect(page.getByRole('group', { name: 'Refine Title', exact: true })).toBeInViewport();
+      }
       await page
         .getByRole('complementary')
-        .getByRole('button', { name: 'Refine Title', exact: true })
+        .getByRole('button', { name: 'Proofread Title', exact: true })
         .click();
       await expect(page.getByRole('alert')).toContainText(
         'Your writing is safe',
@@ -122,8 +133,9 @@ for (const viewport of [
       refineFails = false;
       await page
         .getByRole('complementary')
-        .getByRole('button', { name: 'Refine Title', exact: true })
-        .click();
+        .getByRole('button', { name: 'Rephrase Title', exact: true })
+        .focus();
+      await page.keyboard.press('Enter');
       await expect(
         page.getByRole('heading', { name: 'Suggested wording' }),
       ).toBeVisible();
@@ -136,7 +148,7 @@ for (const viewport of [
       ).toHaveValue('retry safely');
       await page
         .getByRole('complementary')
-        .getByRole('button', { name: 'Refine Title', exact: true })
+        .getByRole('button', { name: 'Rewrite Title', exact: true })
         .click();
       await page.getByRole('button', { name: 'Accept wording' }).click();
       await expect(
@@ -156,9 +168,16 @@ for (const viewport of [
       ).toHaveCount(0);
       await page
         .getByRole('complementary')
-        .getByRole('button', { name: 'Refine Capture', exact: true })
+        .getByRole('button', { name: 'Proofread Capture', exact: true })
         .click();
       await page.getByRole('button', { name: 'Accept wording' }).click();
+      expect(refinements).toEqual([
+        { field: 'title', mode: 'proofread' },
+        { field: 'title', mode: 'rephrase' },
+        { field: 'title', mode: 'rewrite' },
+        { field: 'capture', mode: 'proofread' },
+      ]);
+      await expect(page.getByLabel('Capture Optional', { exact: true })).toBeFocused();
       await expect(
         page.getByLabel('Capture Optional', { exact: true }),
       ).toHaveValue('One stable key.');
@@ -226,12 +245,12 @@ for (const viewport of [
       await expect(
         page
           .getByRole('complementary')
-          .getByRole('button', { name: 'Refine Title', exact: true }),
+          .getByRole('button', { name: 'Rewrite Title', exact: true }),
       ).toBeEnabled();
       await expect(
         page
           .getByRole('complementary')
-          .getByRole('button', { name: 'Refine Capture', exact: true }),
+          .getByRole('button', { name: 'Proofread Capture', exact: true }),
       ).toBeDisabled();
 
       await page

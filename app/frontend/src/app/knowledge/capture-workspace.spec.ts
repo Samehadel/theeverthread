@@ -43,7 +43,7 @@ describe('Capture workspace ownership', () => {
     page.publish();
     auth.setAccount({ ...account, workspaceId: 'other' });
     page.publish();
-    page.refine('title');
+    page.refine('title', 'rewrite');
     expect(page.workspaceChanged()).toBe(true);
     expect(page.content().title).toBe('Private draft');
     expect(publish).not.toHaveBeenCalled();
