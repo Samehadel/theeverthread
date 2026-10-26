@@ -9,29 +9,19 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
-import java.util.UUID;
 
-/** Verifies the empty-database transition and refusal to rewrite existing identifiers. */
+/** Verifies fresh initialization, generated identifiers and manual development reset. */
 @Testcontainers
-class IncrementalIdMigrationTests {
-    private static final String MIGRATION = "foundation/20261026-001-incremental-entity-ids.sql";
-
+class DatabaseInitializationTests {
     @Container
     static PostgreSQLContainer database = new PostgreSQLContainer("postgres:17.6-alpine");
 
     @BeforeEach
-    void historicalSchema() throws Exception {
+    void freshSchema() throws Exception {
         try (var connection = connection();
                 var statement = connection.createStatement()) {
             statement.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
-            try (var stream = getClass().getResourceAsStream("/db/changelog-master.yaml")) {
-                var changelog = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-                for (var line :
-                        changelog.lines().filter(value -> value.contains("file: db/")).toList()) {
-                    var path = line.substring(line.indexOf("file: db/") + 9).trim();
-                    if (!path.equals(MIGRATION)) apply(statement, path);
-                }
-            }
+            initialize(statement);
         }
     }
 
@@ -40,10 +30,6 @@ class IncrementalIdMigrationTests {
             throws Exception {
         try (var connection = connection();
                 var statement = connection.createStatement()) {
-            connection.setAutoCommit(false);
-            apply(statement, MIGRATION);
-            connection.commit();
-            connection.setAutoCommit(true);
             for (String table :
                     new String[] {
                         "workspace",
@@ -126,26 +112,98 @@ class IncrementalIdMigrationTests {
     }
 
     @Test
-    void refusesExistingDataWithoutDeletingOrChangingIt() throws Exception {
+    void resetsPopulatedTablesInDependencyOrderAndCanInitializeAgain() throws Exception {
         try (var connection = connection();
                 var statement = connection.createStatement()) {
-            var id = UUID.randomUUID();
+            statement.execute("CREATE TABLE UNRELATED_TABLE (ID INTEGER PRIMARY KEY)");
+            statement.execute("INSERT INTO UNRELATED_TABLE VALUES (1)");
+            statement.execute("INSERT INTO WORKSPACE(NAME, STATUS) VALUES ('First', 'ACTIVE')");
             statement.execute(
-                    "INSERT INTO WORKSPACE(ID, NAME, STATUS) VALUES ('"
-                            + id
-                            + "', 'Keep me', 'ACTIVE')");
-            connection.setAutoCommit(false);
-            assertThatThrownBy(() -> apply(statement, MIGRATION))
-                    .isInstanceOf(SQLException.class)
-                    .hasMessageContaining("require empty application tables");
-            connection.rollback();
-            assertThat(scalar(statement, "SELECT ID FROM WORKSPACE")).isEqualTo(id.toString());
+                    "INSERT INTO ACCOUNT(EMAIL, FULL_NAME, PASSWORD_HASH, STATUS,"
+                        + " DEFAULT_WORKSPACE_ID, UPDATED_AT) VALUES ('first@example.com', 'First',"
+                        + " 'hash', 'ACTIVE', 1, CURRENT_TIMESTAMP)");
+            statement.execute(
+                    "INSERT INTO WORKSPACE_MEMBERSHIP(ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (1, 1,"
+                            + " 'OWNER')");
+            statement.execute(
+                    "INSERT INTO VERIFICATION_EMAIL(ACCOUNT_ID, RECIPIENT, STATUS) VALUES (1,"
+                            + " 'first@example.com', 'PENDING')");
+            statement.execute(
+                    "INSERT INTO OAUTH_IDENTITY(ACCOUNT_ID, PROVIDER, SUBJECT_ID) VALUES (1,"
+                            + " 'linkedin', 'subject')");
+            statement.execute(
+                    "INSERT INTO KNOWLEDGE_TICKET(AUTHOR_ID, WORKSPACE_ID, AUTHOR_NAME,"
+                            + " SUBMISSION_ID, CONTENT, CREATED_AT, CLASSIFICATION_STATUS,"
+                            + " NEXT_ATTEMPT_AT) VALUES (1, 1, 'First', gen_random_uuid(), '{}',"
+                            + " CURRENT_TIMESTAMP, 'PENDING', CURRENT_TIMESTAMP)");
+            statement.execute(
+                    "INSERT INTO TEAM_INVITATION(WORKSPACE_ID, EMAIL, ADMINISTRATOR_NAME,"
+                            + " ADMINISTRATOR_ID, STATUS, EXPIRES_AT, ATTEMPTED_AT) VALUES (1,"
+                            + " 'next@example.com', 'First', 1, 'SENDING', CURRENT_TIMESTAMP,"
+                            + " CURRENT_TIMESTAMP)");
+            statement.execute("CREATE TABLE DATABASECHANGELOG (ID TEXT)");
+            statement.execute("CREATE TABLE DATABASECHANGELOGLOCK (ID INTEGER)");
+            apply(statement, "reset-development.sql");
+            assertThat(scalar(statement, "SELECT COUNT(*) FROM UNRELATED_TABLE")).isEqualTo("1");
             assertThat(
                             scalar(
                                     statement,
-                                    "SELECT data_type FROM information_schema.columns WHERE"
-                                            + " table_name='workspace' AND column_name='id'"))
-                    .isEqualTo("uuid");
+                                    "SELECT COUNT(*) FROM information_schema.tables WHERE"
+                                            + " table_schema='public'"))
+                    .isEqualTo("1");
+            initialize(statement);
+            assertThat(
+                            scalar(
+                                    statement,
+                                    "INSERT INTO WORKSPACE(NAME, STATUS) VALUES ('Recreated',"
+                                            + " 'ACTIVE') RETURNING ID"))
+                    .isEqualTo("1");
+            assertThat(
+                            scalar(
+                                    statement,
+                                    "SELECT COUNT(*) FROM pg_constraint WHERE"
+                                            + " conrelid='workspace_membership'::regclass AND"
+                                            + " contype='f'"))
+                    .isEqualTo("2");
+            apply(statement, "reset-development.sql");
+            apply(statement, "reset-development.sql");
+        }
+    }
+
+    @Test
+    void rollsBackResetWhenAnUnrelatedTableReferencesApplicationData() throws Exception {
+        try (var connection = connection();
+                var statement = connection.createStatement()) {
+            statement.execute("INSERT INTO WORKSPACE(NAME, STATUS) VALUES ('Keep me', 'ACTIVE')");
+            statement.execute(
+                    "CREATE TABLE EXTERNAL_REFERENCE (WORKSPACE_ID BIGINT REFERENCES"
+                        + " WORKSPACE(ID))");
+            statement.execute("INSERT INTO EXTERNAL_REFERENCE VALUES (1)");
+            assertThatThrownBy(() -> apply(statement, "reset-development.sql"))
+                    .isInstanceOf(SQLException.class)
+                    .hasMessageContaining("depend");
+            statement.execute("ROLLBACK");
+            assertThat(scalar(statement, "SELECT NAME FROM WORKSPACE WHERE ID=1"))
+                    .isEqualTo("Keep me");
+            assertThat(scalar(statement, "SELECT WORKSPACE_ID FROM EXTERNAL_REFERENCE"))
+                    .isEqualTo("1");
+            assertThat(
+                            scalar(
+                                    statement,
+                                    "SELECT COUNT(*) FROM information_schema.tables WHERE"
+                                        + " table_schema='public' AND"
+                                        + " table_name='knowledge_ticket'"))
+                    .isEqualTo("1");
+        }
+    }
+
+    private void initialize(Statement statement) throws Exception {
+        try (var stream = getClass().getResourceAsStream("/db/changelog-master.yaml")) {
+            var changelog = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            for (var line :
+                    changelog.lines().filter(value -> value.contains("file: db/")).toList()) {
+                apply(statement, line.substring(line.indexOf("file: db/") + 9).trim());
+            }
         }
     }
 

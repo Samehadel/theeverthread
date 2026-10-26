@@ -9,8 +9,8 @@ info:
     established lifetimes. Entity identifiers are positive bigint values encoded as decimal strings
     throughout JSON, paths, headers and links; clients must not convert them to JavaScript numbers.
     submissionId remains a UUID and must be reused for retries. Pagination cursors use version 2.
-    This development schema transition requires empty application tables; old IDs, links and refresh
-    cookies are invalid after database reset.
+    Initialization SQL creates bigint keys directly and requires a fresh schema without application
+    tables or Liquibase history. Old IDs, links and refresh cookies are invalid after database reset.
 paths:
   /api/auth/social/providers:
     get:
