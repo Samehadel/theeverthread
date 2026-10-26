@@ -1,13 +1,14 @@
 package com.theeverthread.knowledge.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 public record TicketView(
-        UUID id,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Long id,
         TicketContent content,
-        UUID authorId,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Long authorId,
         String authorName,
         Instant createdAt,
         String classificationStatus,

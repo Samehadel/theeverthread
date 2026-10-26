@@ -41,14 +41,23 @@ class InvitationIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired IdentityService identity;
-    @Autowired InvitationService invitations;
-    @Autowired VerificationEmailWorker worker;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired MockMvc mvc;
-    @MockitoBean VerificationMail verification;
-    @MockitoBean InvitationMail mail;
-    @MockitoBean Clock clock;
+    @Autowired
+
+    IdentityService identity;
+    @Autowired
+    InvitationService invitations;
+    @Autowired
+    VerificationEmailWorker worker;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    MockMvc mvc;
+    @MockitoBean
+    VerificationMail verification;
+    @MockitoBean
+    InvitationMail mail;
+    @MockitoBean
+    Clock clock;
     final Instant now = Instant.parse("2026-10-07T08:00:00Z");
 
     @BeforeEach
@@ -62,7 +71,7 @@ class InvitationIntegrationTests {
     void admin(String email, String domain) {
         identity.register(new RegistrationRequest("Ada", email, "Validpass!"));
         var link = new String[1];
-        var id = new UUID[1];
+        var id = new Long[1];
         doAnswer(
                         call -> {
                             id[0] = call.getArgument(1);
@@ -278,7 +287,7 @@ class InvitationIntegrationTests {
                 .andExpect(status().isNotFound());
         jdbc.update(
                 "UPDATE WORKSPACE_MEMBERSHIP SET ROLE='MEMBER' WHERE ACCOUNT_ID=(SELECT ID FROM"
-                    + " ACCOUNT WHERE EMAIL='admin@example.com')");
+                        + " ACCOUNT WHERE EMAIL='admin@example.com')");
         assertThatThrownBy(() -> send("fresh@example.com"))
                 .isInstanceOfSatisfying(
                         IdentityException.class, e -> assertThat(e.status()).isEqualTo(403));
@@ -381,7 +390,9 @@ class InvitationIntegrationTests {
                         error -> assertThat(error.status()).isEqualTo(403));
     }
 
-    @Autowired InvitationAcceptanceService acceptance;
+    @Autowired
+
+    InvitationAcceptanceService acceptance;
 
     @Test
     void resendCooldownSuccessAndFailurePreserveCorrectLink() {
@@ -609,7 +620,7 @@ class InvitationIntegrationTests {
                 .andExpect(status().isForbidden());
         jdbc.update(
                 "UPDATE WORKSPACE_MEMBERSHIP SET ROLE='MEMBER' WHERE ACCOUNT_ID=(SELECT ID FROM"
-                    + " ACCOUNT WHERE EMAIL='admin@example.com')");
+                        + " ACCOUNT WHERE EMAIL='admin@example.com')");
         assertThatThrownBy(
                         () ->
                                 invitations.sent(
@@ -727,24 +738,23 @@ class InvitationIntegrationTests {
                                 invitations.resend(
                                         "admin@example.com",
                                         identity.current("admin@example.com").workspaceId(),
-                                        UUID.randomUUID()))
+                                        Long.MAX_VALUE))
                 .isInstanceOf(IdentityException.class);
     }
 
-    void seedMember(String email, UUID workspace, Instant updatedAt) {
-        UUID id = UUID.randomUUID();
+    void seedMember(String email, Long workspace, Instant updatedAt) {
+        var id =
+                jdbc.queryForObject(
+                        "INSERT INTO ACCOUNT(EMAIL, FULL_NAME, PASSWORD_HASH, STATUS,"
+                            + " DEFAULT_WORKSPACE_ID, UPDATED_AT) VALUES (?, 'Member', 'unused',"
+                            + " 'ACTIVE', ?, ?) RETURNING ID",
+                        Long.class,
+                        email,
+                        workspace,
+                        java.sql.Timestamp.from(updatedAt));
         jdbc.update(
-                "INSERT INTO ACCOUNT(ID, EMAIL, FULL_NAME, PASSWORD_HASH, STATUS,"
-                    + " DEFAULT_WORKSPACE_ID, UPDATED_AT) VALUES (?, ?, 'Member', 'unused',"
-                    + " 'ACTIVE', ?, ?)",
-                id,
-                email,
-                workspace,
-                java.sql.Timestamp.from(updatedAt));
-        jdbc.update(
-                "INSERT INTO WORKSPACE_MEMBERSHIP(ID, ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (?, ?,"
-                    + " ?, 'MEMBER')",
-                UUID.randomUUID(),
+                "INSERT INTO WORKSPACE_MEMBERSHIP(ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (?, ?,"
+                    + " 'MEMBER')",
                 id,
                 workspace);
     }

@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.util.UUID;
 
 /** Serializes provider and email claims; new users and links commit together. */
 @Service
@@ -129,7 +128,6 @@ public class SocialIdentityServiceImpl implements SocialIdentityService {
 
     private void attach(AccountEntity account, SocialIdentityView identity) {
         var provider = new OAuthIdentityEntity();
-        provider.setId(UUID.randomUUID());
         provider.setAccount(account);
         provider.setProvider(identity.provider());
         provider.setSubjectId(identity.subject());

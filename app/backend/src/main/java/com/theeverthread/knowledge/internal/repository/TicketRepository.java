@@ -7,8 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface TicketRepository extends JpaRepository<TicketEntity, UUID> {
-    Optional<TicketEntity> findByAuthorIdAndSubmissionId(UUID authorId, UUID submissionId);
+public interface TicketRepository extends JpaRepository<TicketEntity, Long> {
+    Optional<TicketEntity> findByAuthorIdAndSubmissionId(Long authorId, UUID submissionId);
 
-    Optional<TicketEntity> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
+    Optional<TicketEntity> findByIdAndWorkspaceId(Long id, Long workspaceId);
 }

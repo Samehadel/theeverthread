@@ -17,19 +17,19 @@ public class InvitationServiceImpl implements InvitationService {
     private final SecureRandom random = new SecureRandom();
 
     @Override
-    public InvitationPageView history(String actor, java.util.UUID workspaceId, int page) {
+    public InvitationPageView history(String actor, Long workspaceId, int page) {
         return transactions.history(actor, workspaceId, page);
     }
 
-    public java.util.List<InvitationView> sent(String actor, java.util.UUID workspaceId) {
+    public java.util.List<InvitationView> sent(String actor, Long workspaceId) {
         return transactions.sent(actor, workspaceId);
     }
 
-    public java.util.List<ActiveMemberView> members(String actor, java.util.UUID workspaceId) {
+    public java.util.List<ActiveMemberView> members(String actor, Long workspaceId) {
         return transactions.members(actor, workspaceId);
     }
 
-    public InvitationView resend(String actor, java.util.UUID workspaceId, java.util.UUID id) {
+    public InvitationView resend(String actor, Long workspaceId, Long id) {
         String token = token();
         var claim = transactions.claimResend(actor, workspaceId, id, token);
         try {
@@ -46,8 +46,7 @@ public class InvitationServiceImpl implements InvitationService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    public InvitationView send(
-            String actor, java.util.UUID workspaceId, InvitationRequest request) {
+    public InvitationView send(String actor, Long workspaceId, InvitationRequest request) {
         String token = token();
         var claim = transactions.claim(actor, workspaceId, request, token);
         if (claim.workspaceName() == null) {
@@ -62,8 +61,7 @@ public class InvitationServiceImpl implements InvitationService {
         return transactions.complete(claim.view().id(), token, messageId, null);
     }
 
-    public InvitationView status(
-            String actor, java.util.UUID workspaceId, InvitationRequest request) {
+    public InvitationView status(String actor, Long workspaceId, InvitationRequest request) {
         return transactions.status(actor, workspaceId, request);
     }
 }

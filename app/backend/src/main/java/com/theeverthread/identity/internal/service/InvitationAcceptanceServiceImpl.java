@@ -17,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.util.UUID;
 
 /**
  * Serializes acceptance with registration, verification, invitation sends, and other acceptances.
@@ -79,7 +78,6 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
                             request.fullName(), invitation.getEmail(), request.password());
             validate(registration);
             account = new AccountEntity();
-            account.setId(UUID.randomUUID());
             account.setEmail(invitation.getEmail());
             account.setFullName(request.fullName().trim());
             account.setPasswordHash(passwords.encode(request.password()));
@@ -121,7 +119,7 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
         }
     }
 
-    private InvitationEntity lockedInvitation(UUID id) {
+    private InvitationEntity lockedInvitation(Long id) {
         var email = invitations.emailForId(id).orElse(null);
         if (email == null) {
             return null;

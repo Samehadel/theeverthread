@@ -9,15 +9,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.UUID;
-
 @Service
 @RequiredArgsConstructor
 public class WorkspaceServiceImpl implements WorkspaceService {
     private final WorkspaceAccess access;
 
     @Transactional(readOnly = true)
-    public AccountView select(String email, UUID id) {
+    public AccountView select(String email, Long id) {
         return access.view(access.require(email, id, false).getAccount(), id);
     }
 
@@ -30,7 +28,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     }
 
     @Transactional
-    public AccountView rename(String email, UUID id, String name) {
+    public AccountView rename(String email, Long id, String name) {
         validate(name);
         var member = access.require(email, id, true);
         member.getWorkspace().setName(name.trim());

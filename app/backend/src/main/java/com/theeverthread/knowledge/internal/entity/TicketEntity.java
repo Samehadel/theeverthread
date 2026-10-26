@@ -15,12 +15,16 @@ import java.util.UUID;
 @Getter
 @Setter
 public class TicketEntity {
-    @Id private UUID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false)
-    private UUID authorId;
+    private Long authorId;
 
-    @Column private UUID workspaceId;
+    @Column
+
+    private Long workspaceId;
 
     @Column(nullable = false, length = 200)
     private String authorName;

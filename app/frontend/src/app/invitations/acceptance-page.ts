@@ -59,7 +59,7 @@ export class AcceptancePage {
     this.route.fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => {
       if (fragment === null && this.link) return;
       const match =
-        /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([A-Za-z0-9_-]{43})$/i.exec(
+        /^([1-9][0-9]{0,18})\.([A-Za-z0-9_-]{43})$/i.exec(
           fragment ?? '',
         );
       this.link = match ? { id: match[1], token: match[2] } : null;

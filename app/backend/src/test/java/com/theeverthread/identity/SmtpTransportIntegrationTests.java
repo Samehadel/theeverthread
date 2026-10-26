@@ -12,7 +12,6 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import java.util.concurrent.*;
 
 /** Exercises the real JavaMail transport against a loopback-only SMTP relay. */
@@ -35,7 +34,7 @@ class SmtpTransportIntegrationTests {
                             "http://localhost:4200",
                             "verified@example.com",
                             sender.getHost());
-            var id = UUID.randomUUID();
+            var id = 123L;
             String messageId = null;
             if (accept) {
                 messageId = mail.send("recipient@example.com", id, "test-token");

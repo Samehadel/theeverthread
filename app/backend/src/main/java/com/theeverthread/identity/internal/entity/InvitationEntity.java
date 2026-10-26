@@ -6,14 +6,15 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "TEAM_INVITATION")
 @Getter
 @Setter
 public class InvitationEntity {
-    @Id private UUID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "WORKSPACE_ID", nullable = false)
@@ -26,7 +27,7 @@ public class InvitationEntity {
     private String administratorName;
 
     @Column(nullable = false)
-    private UUID administratorId;
+    private Long administratorId;
 
     @Column(nullable = false, length = 20)
     private String status;

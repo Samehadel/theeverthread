@@ -30,7 +30,6 @@ public class WorkspaceAccess {
 
     public WorkspaceEntity createOwned(AccountEntity account, String name) {
         var workspace = new WorkspaceEntity();
-        workspace.setId(UUID.randomUUID());
         workspace.setName(name);
         workspace.setStatus(WorkspaceStatus.ACTIVE);
         workspace = workspaces.save(workspace);
@@ -48,7 +47,6 @@ public class WorkspaceAccess {
                         .orElseGet(
                                 () -> {
                                     var created = new MembershipEntity();
-                                    created.setId(UUID.randomUUID());
                                     return created;
                                 });
         membership.setActive(true);
@@ -69,7 +67,7 @@ public class WorkspaceAccess {
                                         "Verify your email and log in to continue."));
     }
 
-    public MembershipEntity require(String email, UUID workspaceId, boolean owner) {
+    public MembershipEntity require(String email, Long workspaceId, boolean owner) {
         var account = account(email);
         if (workspaceId == null) throw denied();
         var member =
@@ -81,7 +79,7 @@ public class WorkspaceAccess {
         return member;
     }
 
-    public AccountView view(AccountEntity account, UUID selected) {
+    public AccountView view(AccountEntity account, Long selected) {
         var available =
                 memberships
                         .findByAccountIdAndActiveTrueOrderByWorkspaceNameAsc(account.getId())
@@ -89,7 +87,7 @@ public class WorkspaceAccess {
                         .filter(m -> m.getWorkspace().getStatus() == WorkspaceStatus.ACTIVE)
                         .map(mapper::workspace)
                         .toList();
-        UUID preferred =
+        Long preferred =
                 selected != null
                         ? selected
                         : account.getDefaultWorkspace() == null

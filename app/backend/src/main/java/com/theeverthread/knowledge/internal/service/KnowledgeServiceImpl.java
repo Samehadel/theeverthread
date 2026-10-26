@@ -18,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +33,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Override
     @Transactional
-    public TicketView create(String email, UUID workspaceId, CreateTicketRequest request) {
+    public TicketView create(String email, Long workspaceId, CreateTicketRequest request) {
         var account = identity.current(email, workspaceId);
         if (request == null || request.submissionId() == null)
             TicketRules.invalid("A submission ID is required.");
@@ -57,7 +56,6 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             return mapper.view(existing.get());
         }
         var ticket = new TicketEntity();
-        ticket.setId(UUID.randomUUID());
         ticket.setAuthorId(account.id());
         ticket.setWorkspaceId(account.workspaceId());
         ticket.setAuthorName(account.fullName());
@@ -72,7 +70,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Override
     @Transactional(readOnly = true)
-    public TicketView get(String email, UUID workspaceId, UUID id) {
+    public TicketView get(String email, Long workspaceId, Long id) {
         var account = identity.current(email, workspaceId);
         return tickets.findByIdAndWorkspaceId(id, account.workspaceId())
                 .map(mapper::view)
@@ -88,7 +86,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Transactional(readOnly = true)
     public TicketPage browse(
             String email,
-            UUID workspaceId,
+            Long workspaceId,
             String detailsType,
             Integer limit,
             String encodedCursor) {
@@ -104,13 +102,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String next = null;
         if (rows.size() > size) {
             var last = items.getLast();
-            next = new TicketCursor(1, last.createdAt(), last.id(), type).encode();
+            next = new TicketCursor(2, last.createdAt(), last.id(), type).encode();
         }
         return new TicketPage(items, next);
     }
 
     @Override
-    public RefinementView refine(String email, UUID workspaceId, RefinementRequest request) {
+    public RefinementView refine(String email, Long workspaceId, RefinementRequest request) {
         identity.current(email, workspaceId);
         if (request == null
                 || !("title".equals(request.field()) || "capture".equals(request.field()))) {

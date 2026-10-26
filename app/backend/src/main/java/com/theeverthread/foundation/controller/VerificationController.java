@@ -15,7 +15,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 public class VerificationController {
@@ -27,7 +26,8 @@ public class VerificationController {
         this.login = login;
     }
 
-    public record VerifyRequest(@NotNull UUID id, @NotBlank @Size(max = 100) String token) {}
+    public record VerifyRequest(
+            @NotNull @Positive Long id, @NotBlank @Size(max = 100) String token) {}
 
     @PostMapping("/api/registration/verify")
     public VerificationView verify(
