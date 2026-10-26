@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+const catalogLabels = {
+  'type:coding': 'Coding',
+  'area:backend': 'Backend',
+  'area:testing': 'Testing',
+  'technology:java': 'Java',
+};
+
 for (const viewport of [
   { width: 1440, height: 1000 },
   { width: 390, height: 844 },
@@ -124,11 +131,16 @@ for (const viewport of [
             },
           });
         }
+        if (path === '/api/knowledge/tickets/attributes')
+          return route.fulfill({ json: { data: catalogLabels } });
         if (path === '/api/knowledge/tickets') {
           const request = route.request().postDataJSON();
           if (request.content.template === 'Coding') {
-            expect(request.content.details.find((block: any) => block.type === 'code')?.language)
-              .toBe('python');
+            expect(
+              request.content.details.find(
+                (block: any) => block.type === 'code',
+              )?.language,
+            ).toBe('python');
           }
           ids.push(request.submissionId);
           published = {
@@ -186,7 +198,8 @@ for (const viewport of [
       await page.keyboard.type('return key;');
       await expect(editor.locator('pre')).toContainText('return key;');
       const codeLanguage = page.getByRole('combobox', {
-        name: 'Code language', exact: true,
+        name: 'Code language',
+        exact: true,
       });
       await codeLanguage.focus();
       await codeLanguage.selectOption('java');

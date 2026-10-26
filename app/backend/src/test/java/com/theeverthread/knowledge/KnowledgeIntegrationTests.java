@@ -47,7 +47,6 @@ class KnowledgeIntegrationTests {
     }
 
     @Autowired
-
     KnowledgeService knowledge;
     @Autowired
     ClassificationWorker worker;
@@ -55,6 +54,8 @@ class KnowledgeIntegrationTests {
     ClassificationTransactions transactions;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    AttributeCatalog catalog;
     @Autowired
     MockMvc mvc;
     @Autowired
@@ -430,7 +431,7 @@ class KnowledgeIntegrationTests {
                         + " WHERE ID=?",
                 ticket.id());
         verifyNoInteractions(ai);
-        when(ai.classify(content()))
+        when(ai.classify(eq(content()), anyMap()))
                 .thenReturn(List.of("area:backend", "type:coding", "area:backend"));
         worker.runOnce();
         var classified =
@@ -438,6 +439,73 @@ class KnowledgeIntegrationTests {
                         "member@example.com", workspaceFor("member@example.com"), ticket.id());
         assertThat(classified.classificationStatus()).isEqualTo("COMPLETE");
         assertThat(classified.attributes()).containsExactly("area:backend", "type:coding");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isEqualTo(AttributeCatalog.version(catalog.definitions()));
+    }
+
+    @Test
+    void personalCapturesAndAbstentionCompleteWithoutAffectingPublication() {
+        var content =
+                new TicketContent(
+                        "An evening with my family",
+                        null,
+                        "Knowledge",
+                        List.of(
+                                new TicketContent.DetailBlock(
+                                        "paragraph",
+                                        "We shared stories over dinner.",
+                                        null,
+                                        null)));
+        var ticket =
+                knowledge.create(
+                        "member@example.com",
+                        workspaceFor("member@example.com"),
+                        new CreateTicketRequest(UUID.randomUUID(), content));
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isNull();
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second'"
+                        + " WHERE ID=?",
+                ticket.id());
+        when(ai.classify(eq(content), anyMap()))
+                .thenReturn(List.of("type:experience", "area:family"));
+        worker.runOnce();
+        assertThat(
+                        knowledge
+                                .get(
+                                        "member@example.com",
+                                        workspaceFor("member@example.com"),
+                                        ticket.id())
+                                .attributes())
+                .containsExactly("type:experience", "area:family");
+
+        // Requeue only this fixture to exercise successful no-match, not provider failure.
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET CLASSIFICATION_STATUS='PENDING',"
+                        + " NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE ID=?",
+                ticket.id());
+        when(ai.classify(eq(content), anyMap())).thenReturn(List.of());
+        worker.runOnce();
+        var unclassified =
+                knowledge.get(
+                        "member@example.com", workspaceFor("member@example.com"), ticket.id());
+        assertThat(unclassified.classificationStatus()).isEqualTo("COMPLETE");
+        assertThat(unclassified.attributes()).isEmpty();
+        assertThat(unclassified.content()).isEqualTo(content);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isEqualTo(AttributeCatalog.version(catalog.definitions()));
     }
 
     @Test
@@ -450,7 +518,7 @@ class KnowledgeIntegrationTests {
                 "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second'"
                         + " WHERE ID=?",
                 ticket.id());
-        when(ai.classify(content())).thenReturn(List.of("invented:attribute"));
+        when(ai.classify(eq(content()), anyMap())).thenReturn(List.of("invented:attribute"));
         worker.runOnce();
         assertThat(
                         knowledge
@@ -460,7 +528,8 @@ class KnowledgeIntegrationTests {
                                         ticket.id())
                                 .classificationStatus())
                 .isEqualTo("RETRYING");
-        when(ai.classify(content())).thenThrow(new IllegalStateException("provider unavailable"));
+        when(ai.classify(eq(content()), anyMap()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
         for (int i = 0; i < 2; i++) {
             jdbc.update(
                     "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
@@ -474,7 +543,100 @@ class KnowledgeIntegrationTests {
         assertThat(published.content()).isEqualTo(content());
         assertThat(published.attributes()).isEmpty();
         worker.runOnce();
-        verify(ai, times(3)).classify(content());
+        verify(ai, times(3)).classify(eq(content()), anyMap());
+    }
+
+    @Test
+    void databaseCatalogSupportsNewLabelsWithoutCodeChangesAndRetainsInactiveLabels()
+            throws Exception {
+        assertThat(catalog.definitions()).isNotEmpty();
+        jdbc.update(
+                "INSERT INTO KNOWLEDGE_ATTRIBUTE (ID, DISPLAY_LABEL, DESCRIPTION, SORT_ORDER)"
+                        + " VALUES (?, ?, ?, ?)",
+                "area:gardening",
+                "Gardening",
+                "Gardens and plants",
+                100);
+        try {
+            var ticket =
+                    knowledge.create(
+                            "member@example.com", workspaceFor("member@example.com"), request());
+            jdbc.update(
+                    "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                            + " second' WHERE ID=?",
+                    ticket.id());
+            var snapshot = catalog.definitions();
+            when(ai.classify(eq(content()), anyMap()))
+                    .thenAnswer(
+                            invocation -> {
+                                assertThat(invocation.<java.util.Map<String, String>>getArgument(1))
+                                        .containsEntry("area:gardening", "Gardens and plants");
+                                // The in-flight result must retain the version of its actual prompt
+                                // snapshot.
+                                jdbc.update(
+                                        "UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=FALSE,"
+                                                + " DISPLAY_LABEL='Garden projects' WHERE"
+                                                + " ID='area:gardening'");
+                                return List.of("area:gardening");
+                            });
+            worker.runOnce();
+            assertThat(
+                            knowledge
+                                    .get(
+                                            "member@example.com",
+                                            workspaceFor("member@example.com"),
+                                            ticket.id())
+                                    .attributes())
+                    .containsExactly("area:gardening");
+            assertThat(
+                            jdbc.queryForObject(
+                                    "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE"
+                                            + " ID=?",
+                                    String.class,
+                                    ticket.id()))
+                    .isEqualTo(AttributeCatalog.version(snapshot));
+            assertThat(catalog.definitions()).doesNotContainKey("area:gardening");
+            mvc.perform(
+                            get("/api/knowledge/tickets/attributes")
+                                    .with(user("member@example.com"))
+                                    .header("X-Workspace-Id", workspaceFor("member@example.com")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data['area:gardening']").value("Garden projects"));
+            mvc.perform(get("/api/knowledge/tickets/attributes"))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(
+                            get("/api/knowledge/tickets/attributes")
+                                    .with(user("outsider@example.com"))
+                                    .header("X-Workspace-Id", workspaceFor("member@example.com")))
+                    .andExpect(status().isForbidden());
+        } finally {
+            jdbc.update("DELETE FROM KNOWLEDGE_ATTRIBUTE WHERE ID='area:gardening'");
+        }
+    }
+
+    @Test
+    void emptyActiveCatalogCompletesWithoutCallingTheProvider() {
+        var activeIds = catalog.definitions().keySet();
+        jdbc.update("UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=FALSE");
+        try {
+            var ticket =
+                    knowledge.create(
+                            "member@example.com", workspaceFor("member@example.com"), request());
+            jdbc.update(
+                    "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                            + " second' WHERE ID=?",
+                    ticket.id());
+            worker.runOnce();
+            var result =
+                    knowledge.get(
+                            "member@example.com", workspaceFor("member@example.com"), ticket.id());
+            assertThat(result.classificationStatus()).isEqualTo("COMPLETE");
+            assertThat(result.attributes()).isEmpty();
+            verifyNoInteractions(ai);
+        } finally {
+            activeIds.forEach(
+                    id -> jdbc.update("UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=TRUE WHERE ID=?", id));
+        }
     }
 
     @Test
@@ -493,7 +655,7 @@ class KnowledgeIntegrationTests {
         jdbc.update(
                 "UPDATE KNOWLEDGE_TICKET SET LEASE_UNTIL=CURRENT_TIMESTAMP-INTERVAL '1 second'");
         var newWork = transactions.claim();
-        transactions.complete(oldWork, List.of("area:backend"));
+        transactions.complete(oldWork, List.of("area:backend"), catalog.definitions());
         assertThat(
                         knowledge
                                 .get(
@@ -502,7 +664,7 @@ class KnowledgeIntegrationTests {
                                         ticket.id())
                                 .classificationStatus())
                 .isEqualTo("PROCESSING");
-        transactions.complete(newWork, List.of());
+        transactions.complete(newWork, List.of(), catalog.definitions());
         assertThat(
                         knowledge
                                 .get(

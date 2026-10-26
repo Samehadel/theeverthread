@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+const catalogLabels = {
+  'type:coding': 'Coding',
+  'area:backend': 'Backend',
+  'area:testing': 'Testing',
+  'technology:java': 'Java',
+};
+
 const account = {
   id: 'author',
   workspaceId: 'org',
@@ -37,6 +44,8 @@ for (const width of [1440, 390]) {
         url.pathname.startsWith('/api/workspaces/')
       )
         return route.fulfill({ json: { data: account } });
+      if (url.pathname === '/api/knowledge/tickets/attributes')
+        return route.fulfill({ json: { data: catalogLabels } });
       if (url.pathname === '/api/knowledge/tickets') {
         calls++;
         const type = url.searchParams.get('detailsType');
@@ -180,6 +189,8 @@ test('detail polling preserves content on failure and clears it after access den
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/me' || path.startsWith('/api/workspaces/'))
       return route.fulfill({ json: { data: account } });
+    if (path === '/api/knowledge/tickets/attributes')
+      return route.fulfill({ json: { data: catalogLabels } });
     if (path.startsWith('/api/knowledge/tickets/')) {
       reads++;
       if (reads === 2) return route.fulfill({ status: 503, json: {} });
@@ -232,3 +243,42 @@ test('detail polling preserves content on failure and clears it after access den
   await page.clock.fastForward(15000);
   expect(reads).toBe(3);
 });
+
+for (const width of [1440, 390]) {
+  test(`uses new database labels and refreshes edits at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    let label = 'Gardening';
+    await page.route('**/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/api/auth/me' || path.startsWith('/api/workspaces/'))
+        return route.fulfill({ json: { data: account } });
+      if (path === '/api/knowledge/tickets/attributes')
+        return route.fulfill({ json: { data: { 'area:gardening': label } } });
+      if (path === '/api/knowledge/tickets')
+        return route.fulfill({
+          json: {
+            data: {
+              items: [{ ...summary(1), attributes: ['area:gardening'] }],
+              nextCursor: null,
+            },
+          },
+        });
+      return route.fulfill({ status: 404 });
+    });
+    await page.goto('/knowledge');
+    await expect(page.getByText('Gardening', { exact: true })).toBeVisible();
+    label = 'Garden projects';
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(
+      page.getByText('Garden projects', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('Gardening', { exact: true })).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}

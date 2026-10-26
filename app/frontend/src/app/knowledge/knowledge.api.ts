@@ -16,6 +16,13 @@ export class KnowledgeApi {
   private readonly http = inject(HttpClient);
   private readonly context = inject(WorkspaceContext);
   private readonly auth = inject(AuthStore);
+  attributes() {
+    return this.http
+      .get<{ data: Record<string, string> }>(
+        '/api/knowledge/tickets/attributes',
+      )
+      .pipe(map((response) => response.data));
+  }
   browse(detailsType: string, cursor: string | null) {
     const params: Record<string, string> = {};
     if (detailsType) params['detailsType'] = detailsType;

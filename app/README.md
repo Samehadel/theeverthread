@@ -360,8 +360,11 @@ explicit decision, so embedded sensitive text is not redacted.
 Classification makes up to three attempts and preserves publication on failure.
 `theeverthread.knowledge.classification.enabled=false` disables the scheduler;
 `theeverthread.knowledge.classification.delay` changes its five-second default interval.
-The Details block format and catalog are documented in
-[the knowledge contract](../architecture/backend/knowledge-capture.md).
+The classification catalog is seeded by Liquibase in `KNOWLEDGE_ATTRIBUTE`; active
+definitions and display labels are read from the database. The catalog update
+procedure, model evaluation command, result
+versioning, and selective legacy reclassification runbook are documented in
+[Automatic capture classification](../docs/CLASSIFICATION.md).
 
 Public Actuator probes are `/actuator/health/liveness` and
 `/actuator/health/readiness` (database readiness). Aggregate `/actuator/health`

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,14 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     private final JsonMapper json;
     private final Clock clock;
     private final KnowledgeAi ai;
+    private final AttributeCatalog catalog;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, String> attributes(String email, Long workspaceId) {
+        identity.current(email, workspaceId);
+        return catalog.labels();
+    }
 
     @Override
     @Transactional
