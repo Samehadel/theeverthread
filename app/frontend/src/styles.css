@@ -2645,3 +2645,11 @@ figure.knowledge-code {
 .landing-page .row:last-child::before {
   bottom: 50%;
 }
+
+.landing-page .sectionhead-stacked {
+  display: block;
+}
+.landing-page .sectionhead-stacked > p {
+  max-width: none;
+  margin: 16px 0 0;
+}
