@@ -446,5 +446,29 @@
       "SIGNUP_REQUIRED": "Create an account using email and password first."
     },
     "linkUnavailable": "Linking is temporarily unavailable. Please retry."
+  },
+  "workspaceSettings": {
+    "title": "Workspaces",
+    "intro": "Create a space for each area of your work, and manage the spaces you own.",
+    "manage": "Manage workspaces",
+    "createTitle": "Create a workspace",
+    "createHint": "Keep a new project, team, or collection of knowledge in its own space.",
+    "createAction": "Create workspace",
+    "nameHint": "1–200 characters. Names must be unique among your owned workspaces, regardless of capitalization.",
+    "yourWorkspaces": "Your workspaces",
+    "switchHint": "Use the workspace switcher in the navigation to move between spaces.",
+    "owner": "Owner",
+    "member": "Member",
+    "current": "Current",
+    "ownerOnly": "Only the owner can rename this workspace.",
+    "rename": "Rename",
+    "renameLabel": "Rename {{name}}",
+    "cancel": "Cancel",
+    "created": "Workspace created. You can now select it in the workspace switcher.",
+    "renamed": "Workspace name updated.",
+    "duplicate": "You already own a workspace with this name. Choose another name.",
+    "saveFailed": "Unable to save the workspace. Check your connection and access, then try again.",
+    "empty": "You have no workspaces yet. Create one above.",
+    "loadFailed": "Unable to load your workspaces. Please try again."
   }
 }

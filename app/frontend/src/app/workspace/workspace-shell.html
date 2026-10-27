@@ -147,6 +147,24 @@
                   }}</span></a
                 >
               }
+              <a
+                routerLink="/workspace/settings"
+                routerLinkActive="selected"
+                ariaCurrentWhenActive="page"
+                [attr.aria-label]="t('workspaceSettings.title')"
+                [attr.title]="collapsed() ? t('workspaceSettings.title') : null"
+                (click)="closeMobile()"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+                <span class="sidebar-label">{{
+                  t("workspaceSettings.title")
+                }}</span>
+              </a>
             </nav>
           </div>
           <div class="sidebar-bottom">

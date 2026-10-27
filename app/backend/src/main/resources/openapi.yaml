@@ -1172,6 +1172,7 @@ paths:
     post:
       operationId: createWorkspace
       summary: Create an additional owned workspace
+      description: Names are trimmed and unique per owner, ignoring capitalization.
       requestBody: &id002
         required: true
         content:
@@ -1194,6 +1195,8 @@ paths:
                 $ref: "#/components/schemas/AccountEnvelope"
         "403":
           description: No active workspace access, owner permission, or valid CSRF.
+        "409":
+          description: WORKSPACE_NAME_TAKEN — another workspace owned by this account has the same name, ignoring capitalization. Applies to create and rename.
   /api/workspaces/{id}:
     parameters:
       - name: id
@@ -1209,6 +1212,7 @@ paths:
     patch:
       operationId: renameWorkspace
       summary: Owner renames a workspace
+      description: Names are trimmed and unique per owner, ignoring capitalization. The current workspace is excluded from the duplicate check.
       requestBody: *id002
       responses: *id001
 components:

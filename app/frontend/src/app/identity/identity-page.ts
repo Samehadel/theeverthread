@@ -1,6 +1,3 @@
-import { IdentityApi } from './identity.api';
-import { AuthStore } from '../core/auth.store';
-import { firstValueFrom } from 'rxjs';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,10 +20,6 @@ import { IdentityStore } from './identity.store';
 })
 export class IdentityPage {
   readonly store = inject(IdentityStore);
-  private readonly api = inject(IdentityApi);
-  private readonly auth = inject(AuthStore);
-  readonly workspaceBusy = signal(false);
-  readonly workspaceError = signal('');
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   readonly mode = this.route.snapshot.data['mode'] as
@@ -72,9 +65,6 @@ export class IdentityPage {
           : { passwordMismatch: true },
     },
   );
-  readonly workspaceForm = this.fb.group({
-    name: ['', [Validators.required, Validators.maxLength(200)]],
-  });
   readonly loginForm = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
@@ -178,30 +168,6 @@ export class IdentityPage {
         void this.router.navigateByUrl('/login');
     });
   }
-  async renameWorkspace() {
-    this.workspaceForm.markAllAsTouched();
-    if (this.workspaceForm.invalid || this.workspaceBusy()) return;
-    const name = this.workspaceForm.controls.name.value.trim();
-    const selected = this.store.account()?.workspaceId;
-    if (!name || !selected || this.store.account()?.accessRole !== 'OWNER')
-      return;
-    this.workspaceBusy.set(true);
-    this.workspaceError.set('');
-    try {
-      const account = await firstValueFrom(
-        this.api.renameWorkspace(selected, name),
-      );
-      this.auth.setAccount(account);
-      this.workspaceForm.controls.name.setValue(account.workspaceName ?? name);
-    } catch {
-      this.workspaceError.set(
-        'Unable to save the workspace. Check your access and try again.',
-      );
-    } finally {
-      this.workspaceBusy.set(false);
-    }
-  }
-
   register() {
     this.submitted.set(true);
     this.registration.markAllAsTouched();

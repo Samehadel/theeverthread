@@ -1,0 +1,192 @@
+<ng-container *transloco="let t">
+  <main
+    id="main"
+    tabindex="-1"
+    class="workspace-management mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
+  >
+    @if (auth.loading()) {
+      <p role="status">{{ t("identity.home.loading") }}</p>
+    } @else if (!auth.account()) {
+      <h1 class="text-4xl font-semibold">{{ t("workspaceSettings.title") }}</h1>
+      @if (auth.errorCode() && !auth.initialized()) {
+        <p role="alert" class="my-6">{{ t("workspaceSettings.loadFailed") }}</p>
+        <button class="button" (click)="load()">
+          {{ t("foundation.retry") }}
+        </button>
+      } @else {
+        <p class="my-6">{{ t("identity.loginRequired") }}</p>
+        <a class="button" routerLink="/login">{{ t("identity.login") }}</a>
+      }
+    } @else {
+      <p class="eyebrow">{{ t("workspace.settingsEyebrow") }}</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+        {{ t("workspaceSettings.title") }}
+      </h1>
+      <p class="mt-4 text-[var(--muted)]">{{ t("workspaceSettings.intro") }}</p>
+      @if (success()) {
+        <p role="status" class="mt-6 text-[var(--accent)]">
+          {{ t(success()) }}
+        </p>
+      }
+      <section
+        class="workspace-settings"
+        aria-labelledby="create-workspace-title"
+      >
+        <div>
+          <h2 id="create-workspace-title">
+            {{ t("workspaceSettings.createTitle") }}
+          </h2>
+          <p class="workspace-settings-description">
+            {{ t("workspaceSettings.createHint") }}
+          </p>
+        </div>
+        <form
+          [formGroup]="createForm"
+          (ngSubmit)="save('create')"
+          class="workspace-rename-form"
+        >
+          <label for="new-workspace-name">{{
+            t("identity.workspaceName")
+          }}</label>
+          <div class="workspace-rename-controls">
+            <input
+              id="new-workspace-name"
+              class="identity-input"
+              formControlName="name"
+              maxlength="200"
+              required
+              aria-describedby="new-workspace-hint"
+              [readOnly]="busy()"
+              [attr.aria-invalid]="
+                createForm.controls.name.touched && createForm.invalid
+              "
+            />
+            <button class="button" [disabled]="busy()">
+              {{ t("workspaceSettings.createAction") }}
+            </button>
+          </div>
+          <p id="new-workspace-hint" class="form-hint">
+            {{ t("workspaceSettings.nameHint") }}
+          </p>
+          @if (error() && errorForm() === "create") {
+            <p role="alert" class="field-error">{{ t(error()) }}</p>
+          }
+          @if (createForm.controls.name.touched && createForm.invalid) {
+            <p role="alert" class="field-error">
+              {{ t("workspace.renameInvalid") }}
+            </p>
+          }
+        </form>
+      </section>
+      <section
+        class="mt-10"
+        aria-labelledby="your-workspaces-title"
+        [attr.aria-busy]="busy()"
+      >
+        <h2 id="your-workspaces-title" class="text-2xl font-semibold">
+          {{ t("workspaceSettings.yourWorkspaces") }}
+        </h2>
+        <p class="mt-2 text-sm text-[var(--muted)]">
+          {{ t("workspaceSettings.switchHint") }}
+        </p>
+        <ul class="workspace-management-list mt-5">
+          @for (workspace of auth.account()?.workspaces; track workspace.id) {
+            <li class="workspace-management-row">
+              <div class="min-w-0">
+                <h3 class="workspace-management-name">{{ workspace.name }}</h3>
+                <p class="mt-1 text-sm text-[var(--muted)]">
+                  {{
+                    t(
+                      workspace.role === "OWNER"
+                        ? "workspaceSettings.owner"
+                        : "workspaceSettings.member"
+                    )
+                  }}
+                  @if (workspace.id === auth.account()?.workspaceId) {
+                    · {{ t("workspaceSettings.current") }}
+                  }
+                  @if (workspace.id === auth.account()?.defaultWorkspaceId) {
+                    · {{ t("workspace.defaultLabel") }}
+                  }
+                </p>
+              </div>
+              @if (workspace.role === "OWNER") {
+                @if (editing() === workspace.id) {
+                  <form
+                    [formGroup]="renameForm"
+                    (ngSubmit)="save('rename')"
+                    class="workspace-rename-form min-w-0"
+                  >
+                    <label [for]="'rename-workspace-' + workspace.id">{{
+                      t("identity.workspaceName")
+                    }}</label>
+                    <div class="workspace-rename-controls">
+                      <input
+                        [id]="'rename-workspace-' + workspace.id"
+                        class="identity-input"
+                        formControlName="name"
+                        maxlength="200"
+                        required
+                        [readOnly]="busy()"
+                        [attr.aria-describedby]="'rename-hint-' + workspace.id"
+                        [attr.aria-invalid]="
+                          renameForm.controls.name.touched && renameForm.invalid
+                        "
+                      />
+                      <button class="button secondary" [disabled]="busy()">
+                        {{ t("workspace.renameAction") }}
+                      </button>
+                      <button
+                        type="button"
+                        class="button secondary"
+                        [disabled]="busy()"
+                        (click)="cancel()"
+                      >
+                        {{ t("workspaceSettings.cancel") }}
+                      </button>
+                    </div>
+                    <p [id]="'rename-hint-' + workspace.id" class="form-hint">
+                      {{ t("workspaceSettings.nameHint") }}
+                    </p>
+                    @if (error() && errorForm() === 'rename') {
+                      <p role="alert" class="field-error">{{ t(error()) }}</p>
+                    }
+                    @if (
+                      renameForm.controls.name.touched && renameForm.invalid
+                    ) {
+                      <p role="alert" class="field-error">
+                        {{ t("workspace.renameInvalid") }}
+                      </p>
+                    }
+                  </form>
+                } @else {
+                  <button
+                    type="button"
+                    class="button secondary"
+                    [disabled]="busy()"
+                    (click)="edit(workspace)"
+                    [attr.aria-label]="
+                      t('workspaceSettings.renameLabel', {
+                        name: workspace.name,
+                      })
+                    "
+                  >
+                    {{ t("workspaceSettings.rename") }}
+                  </button>
+                }
+              } @else {
+                <span class="text-sm text-[var(--muted)]">{{
+                  t("workspaceSettings.ownerOnly")
+                }}</span>
+              }
+            </li>
+          } @empty {
+            <li class="workspace-management-row">
+              {{ t("workspaceSettings.empty") }}
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  </main>
+</ng-container>
