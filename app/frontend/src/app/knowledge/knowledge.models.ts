@@ -1,10 +1,5 @@
 export type BlockType =
-  | 'paragraph'
-  | 'heading'
-  | 'bulletList'
-  | 'orderedList'
-  | 'link'
-  | 'code';
+  'paragraph' | 'heading' | 'bulletList' | 'orderedList' | 'link' | 'code';
 export interface DetailBlock {
   type: BlockType;
   text: string;
@@ -131,36 +126,16 @@ export interface TicketPageResult {
   items: TicketSummary[];
   nextCursor: string | null;
 }
-const attributeCatalog: [string, string][] = [
-  ['type:knowledge', 'Knowledge'],
-  ['type:coding', 'Coding'],
-  ['type:problem', 'Problem'],
-  ['type:decision', 'Decision'],
-  ['type:accomplishment', 'Accomplishment'],
-  ['type:learning', 'Learning'],
-  ['area:backend', 'Backend'],
-  ['area:frontend', 'Frontend'],
-  ['area:database', 'Database'],
-  ['area:infrastructure', 'Infrastructure'],
-  ['area:security', 'Security'],
-  ['area:testing', 'Testing'],
-  ['area:product', 'Product'],
-  ['area:process', 'Process'],
-  ['technology:java', 'Java'],
-  ['technology:spring', 'Spring'],
-  ['technology:angular', 'Angular'],
-  ['technology:typescript', 'TypeScript'],
-  ['technology:javascript', 'JavaScript'],
-  ['technology:python', 'Python'],
-  ['technology:sql', 'SQL'],
-  ['technology:postgresql', 'PostgreSQL'],
-  ['technology:docker', 'Docker'],
-  ['technology:other', 'Other'],
-];
-export function attributeLabels(ids: string[]): string[] {
-  return attributeCatalog
-    .filter(([id]) => ids.includes(id))
+export function attributeLabels(
+  ids: string[],
+  labels: Record<string, string> = {},
+): string[] {
+  const selected = new Set(ids);
+  const known = Object.entries(labels)
+    .filter(([id]) => selected.has(id))
     .map(([, label]) => label);
+  const unknown = ids.filter((id) => !Object.hasOwn(labels, id));
+  return [...known, ...unknown];
 }
 export function fullDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {

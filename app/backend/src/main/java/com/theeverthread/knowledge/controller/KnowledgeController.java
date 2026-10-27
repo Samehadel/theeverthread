@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/knowledge/tickets")
@@ -33,6 +34,12 @@ public class KnowledgeController {
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String cursor) {
         return knowledge.browse(principal.getName(), workspaceId, detailsType, limit, cursor);
+    }
+
+    @GetMapping("/attributes")
+    public Map<String, String> attributes(
+            Principal principal, @RequestHeader("X-Workspace-Id") Long workspaceId) {
+        return knowledge.attributes(principal.getName(), workspaceId);
     }
 
     @GetMapping("/{id}")

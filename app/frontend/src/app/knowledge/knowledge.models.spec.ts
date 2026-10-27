@@ -1,4 +1,5 @@
 import {
+  attributeLabels,
   canRefineField,
   detailsLength,
   emptyBlock,
@@ -92,5 +93,19 @@ describe('knowledge content', () => {
     expect(
       canRefineField({ ...ticket, capture: 'Existing wording' }, 'capture'),
     ).toBe(true);
+  });
+});
+
+describe('automatic attribute labels', () => {
+  it('uses database-provided labels for new and existing IDs', () => {
+    const labels = {
+      'area:gardening': 'Gardening',
+      'area:backend': 'Server engineering',
+    };
+    expect(attributeLabels(['area:gardening', 'area:backend'], labels)).toEqual(
+      ['Gardening', 'Server engineering'],
+    );
+    expect(attributeLabels(['area:retired'], labels)).toEqual(['area:retired']);
+    expect(attributeLabels([], labels)).toEqual([]);
   });
 });

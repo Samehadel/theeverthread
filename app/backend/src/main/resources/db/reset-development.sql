@@ -6,6 +6,7 @@ SET LOCAL lock_timeout = '10s';
 
 -- Drop dependent tables before the accounts/workspaces they reference.
 DROP TABLE IF EXISTS public.knowledge_ticket;
+DROP TABLE IF EXISTS public.knowledge_attribute;
 DROP TABLE IF EXISTS public.verification_email;
 DROP TABLE IF EXISTS public.oauth_identity;
 DROP TABLE IF EXISTS public.workspace_membership;

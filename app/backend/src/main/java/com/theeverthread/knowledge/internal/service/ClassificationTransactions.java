@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -52,12 +53,14 @@ public class ClassificationTransactions {
     }
 
     @Transactional
-    public void complete(Work work, List<String> attributes) {
-        var valid = AttributeCatalog.validate(attributes);
+    public void complete(Work work, List<String> attributes, Map<String, String> definitions) {
+        var valid = AttributeCatalog.validate(attributes, definitions);
         jdbc.update(
-                "UPDATE KNOWLEDGE_TICKET SET ATTRIBUTES=?, CLASSIFICATION_STATUS='COMPLETE',"
-                        + " LEASE_TOKEN=NULL, LEASE_UNTIL=NULL WHERE ID=? AND LEASE_TOKEN=?",
+                "UPDATE KNOWLEDGE_TICKET SET ATTRIBUTES=?, CLASSIFICATION_VERSION=?,"
+                    + " CLASSIFICATION_STATUS='COMPLETE', LEASE_TOKEN=NULL, LEASE_UNTIL=NULL WHERE"
+                    + " ID=? AND LEASE_TOKEN=?",
                 json.writeValueAsString(valid),
+                AttributeCatalog.version(definitions),
                 work.id(),
                 work.token());
     }

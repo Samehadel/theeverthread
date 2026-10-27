@@ -1,3 +1,4 @@
+import { AttributeCatalogStore } from './attribute-catalog.store';
 import { AuthStore } from '../core/auth.store';
 import {
   afterNextRender,
@@ -23,9 +24,12 @@ export class BrowsePage {
   readonly auth = inject(AuthStore);
   readonly store = inject(BrowseStore);
   readonly templates = templates;
-  readonly labels = attributeLabels;
+  readonly catalog = inject(AttributeCatalogStore);
+  readonly labels = (ids: string[]) =>
+    attributeLabels(ids, this.catalog.labels());
   readonly fullDate = fullDate;
   constructor() {
+    this.catalog.refresh();
     this.store.enter();
     const position = this.store.scroll();
     afterNextRender(() =>
@@ -43,6 +47,7 @@ export class BrowsePage {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
   refresh() {
+    this.catalog.refresh();
     this.store.refresh();
     window.scrollTo({ top: 0, behavior: 'instant' });
   }

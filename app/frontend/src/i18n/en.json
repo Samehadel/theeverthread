@@ -332,7 +332,7 @@
       "FAILED": "Classification unavailable",
       "COMPLETE": "Classification complete"
     },
-    "noMatch": "No matching attributes",
+    "noMatch": "No confident matches found",
     "unavailable": "The request could not finish. Your writing is preserved. Please retry.",
     "retryHint": "Your content is preserved. If publication is uncertain, editing is paused; retry to safely retrieve the same published ticket.",
     "TICKET_NOT_FOUND": "This ticket is unavailable in your workspace.",

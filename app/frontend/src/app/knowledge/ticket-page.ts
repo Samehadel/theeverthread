@@ -1,3 +1,4 @@
+import { AttributeCatalogStore } from './attribute-catalog.store';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -21,12 +22,15 @@ import { attributeLabels, fullDate } from './knowledge.models';
 })
 export class TicketPage {
   readonly store = inject(KnowledgeStore);
-  readonly labels = attributeLabels;
+  readonly catalog = inject(AttributeCatalogStore);
+  readonly labels = (ids: string[]) =>
+    attributeLabels(ids, this.catalog.labels());
   readonly fullDate = fullDate;
   readonly browse = inject(BrowseStore);
   readonly created = history.state?.created === true;
   readonly id = inject(ActivatedRoute).snapshot.paramMap.get('id')!;
   constructor() {
+    this.catalog.refresh();
     this.store.load(this.id);
     effect(() => {
       const ticket = this.store.ticket();

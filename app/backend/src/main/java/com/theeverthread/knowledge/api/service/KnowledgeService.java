@@ -2,7 +2,11 @@ package com.theeverthread.knowledge.api.service;
 
 import com.theeverthread.knowledge.api.dto.*;
 
+import java.util.Map;
+
 public interface KnowledgeService {
+    Map<String, String> attributes(String email, Long workspaceId);
+
     TicketView create(String email, Long workspaceId, CreateTicketRequest request);
 
     TicketPage browse(

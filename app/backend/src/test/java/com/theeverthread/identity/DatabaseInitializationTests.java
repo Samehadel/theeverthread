@@ -177,7 +177,7 @@ class DatabaseInitializationTests {
             statement.execute("INSERT INTO WORKSPACE(NAME, STATUS) VALUES ('Keep me', 'ACTIVE')");
             statement.execute(
                     "CREATE TABLE EXTERNAL_REFERENCE (WORKSPACE_ID BIGINT REFERENCES"
-                        + " WORKSPACE(ID))");
+                            + " WORKSPACE(ID))");
             statement.execute("INSERT INTO EXTERNAL_REFERENCE VALUES (1)");
             assertThatThrownBy(() -> apply(statement, "reset-development.sql"))
                     .isInstanceOf(SQLException.class)
@@ -191,9 +191,43 @@ class DatabaseInitializationTests {
                             scalar(
                                     statement,
                                     "SELECT COUNT(*) FROM information_schema.tables WHERE"
-                                        + " table_schema='public' AND"
-                                        + " table_name='knowledge_ticket'"))
+                                            + " table_schema='public' AND"
+                                            + " table_name='knowledge_ticket'"))
                     .isEqualTo("1");
+        }
+    }
+
+    @Test
+    void catalogMigrationPreservesExistingAttributesAndClassifierVersions() throws Exception {
+        try (var connection = connection();
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA catalog_upgrade; SET search_path TO catalog_upgrade");
+            try {
+                statement.execute(
+                        "CREATE TABLE KNOWLEDGE_TICKET (ATTRIBUTES TEXT, CLASSIFICATION_VERSION"
+                            + " VARCHAR(40))");
+                statement.execute(
+                        "INSERT INTO KNOWLEDGE_TICKET VALUES ('[\"area:backend\"]',"
+                            + " 'life-work-v2')");
+                apply(statement, "knowledge/20261027-001-attribute-catalog.sql");
+                assertThat(scalar(statement, "SELECT ATTRIBUTES FROM KNOWLEDGE_TICKET"))
+                        .isEqualTo("[\"area:backend\"]");
+                assertThat(scalar(statement, "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET"))
+                        .isEqualTo("life-work-v2");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        "SELECT COUNT(*) FROM KNOWLEDGE_ATTRIBUTE WHERE ACTIVE"))
+                        .isEqualTo("40");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        "SELECT DISPLAY_LABEL FROM KNOWLEDGE_ATTRIBUTE WHERE"
+                                            + " ID='area:family'"))
+                        .isEqualTo("Family");
+            } finally {
+                statement.execute("SET search_path TO public; DROP SCHEMA catalog_upgrade CASCADE");
+            }
         }
     }
 

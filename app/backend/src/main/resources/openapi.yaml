@@ -102,6 +102,37 @@ paths:
           description: Provider already linked to another account.
         "503":
           description: Retryable database failure; no partial link.
+  /api/knowledge/tickets/attributes:
+    get:
+      operationId: knowledgeAttributeLabels
+      summary: Read the shared database-managed attribute display labels.
+      description: Requires an authenticated active workspace member and X-Workspace-Id. Includes inactive labels so existing tickets remain readable. Only active definitions are offered to the classifier. The catalog contains no workspace-specific data.
+      security:
+        - SessionCookie: []
+      parameters:
+        - in: header
+          name: X-Workspace-Id
+          required: true
+          schema:
+            type: string
+            pattern: '^[1-9][0-9]{0,18}$'
+      responses:
+        "200":
+          description: Current display labels keyed by stable attribute ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: string
+        "401":
+          description: Authentication required.
+        "403":
+          description: Active membership in the selected workspace required.
   /api/knowledge/tickets:
     get:
       operationId: browseKnowledgeTickets
@@ -1263,7 +1294,7 @@ components:
           type: array
           items:
             type: string
-          description: Extracted stable catalog IDs; clients display catalog labels in type, area, technology order.
+          description: Extracted stable catalog IDs; clients resolve display labels through GET /api/knowledge/tickets/attributes.
     InvitationLink:
       type: object
       required:
@@ -1648,7 +1679,7 @@ components:
             attributes:
               type: array
               uniqueItems: true
-              description: Valid IDs from AttributeCatalog.ALL only. Empty on no-match or before successful classification.
+              description: Up to six distinct active IDs from the database-backed KNOWLEDGE_ATTRIBUTE catalog for new classifications, covering personal and professional capture types, subject areas, and explicit software technologies. Dimensions are optional. Empty on no-match or before successful classification. Legacy results are preserved.
               items:
                 type: string
     RefinementRequest:
