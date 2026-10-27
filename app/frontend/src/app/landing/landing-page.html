@@ -1,6 +1,6 @@
 <ng-container *transloco="let t">
   <a class="skip-link" href="#main">{{ t("landing.skip_to_content") }}</a>
-  <header class="top" id="top">
+  <header class="top landing-top" id="top">
     <nav class="wrap" aria-label="Main navigation">
       <a class="brand" href="#top"
         ><span class="logo" aria-hidden="true"></span>
@@ -14,11 +14,11 @@
       }}</a>
       <a class="navlink" routerLink="/login">{{ t("identity.login") }}</a>
       <a class="button secondary" routerLink="/signup"
-        >{{ t("identity.register") }}<span aria-hidden="true">↗</span>
+        >{{ t("identity.register") }}
       </a>
     </nav>
   </header>
-  <main class="wrap" id="main" tabindex="-1">
+  <main class="wrap landing-page" id="main" tabindex="-1">
     <section class="hero center">
       <p class="eyebrow">{{ t("landing.knowledge_that_stays_with_you") }}</p>
       <h1>
@@ -29,37 +29,36 @@
       <div class="actions">
         <a class="button" routerLink="/signup">{{ t("individual.signup") }}</a>
         <a class="button secondary" href="#workflow"
-          >{{ t("landing.explore_the_vision")
-          }}<span aria-hidden="true">↗</span>
+          >{{ t("landing.explore_the_vision") }}
         </a>
       </div>
     </section>
     <section id="workflow" aria-label="Illustrative product preview">
       <div class="preview">
         <div class="previewbar">
-          <span class="dots" aria-hidden="true">● ● ●</span>
+          <span class="thread-line" aria-hidden="true"></span>
           <span>{{ t("landing.preview_workspace_path") }}</span>
           <span>{{ t("landing.illustrative_preview") }}</span>
         </div>
         <div class="app">
           <aside class="sidebar">
-            <strong>◈ &nbsp;{{ t("landing.preview_workspace_name") }}</strong>
+            <strong>{{ t("landing.preview_workspace_name") }}</strong>
             <div class="sideitem active">
-              ◫ &nbsp;{{ t("landing.your_knowledge") }}
+              {{ t("landing.your_knowledge") }}
             </div>
             <div class="sideitem">
-              ◇ &nbsp;{{ t("landing.capture_knowledge") }}
+              {{ t("landing.capture_knowledge") }}
             </div>
             <div class="sideitem">
-              ↗ &nbsp;{{ t("landing.browse_knowledge") }}
+              {{ t("landing.browse_knowledge") }}
             </div>
             <div class="sideitem">
-              ◎ &nbsp;{{ t("landing.workspace_members") }}
+              {{ t("landing.workspace_members") }}
             </div>
           </aside>
           <div class="appmain">
-            <div class="search">
-              <span>⌕ &nbsp;{{ t("landing.preview_context") }}</span>
+            <div class="preview-context">
+              <span>{{ t("landing.preview_context") }}</span>
             </div>
             <div class="appheading">
               <h2 class="preview-title">
@@ -68,7 +67,7 @@
               <span class="tag">{{ t("landing.your_knowledge") }}</span>
             </div>
             <div class="row">
-              <span class="symbol">✓</span>
+              <span class="entry-index" aria-hidden="true">01</span>
               <span>{{ t("landing.what_fixed_the_checkout_timeout") }}</span>
               <span class="small"
                 >{{ t("landing.problem_resolved") }}&nbsp; · &nbsp;{{
@@ -77,7 +76,7 @@
               >
             </div>
             <div class="row">
-              <span class="symbol">◇</span>
+              <span class="entry-index" aria-hidden="true">02</span>
               <span>{{ t("landing.why_we_chose_asynchronous_exports") }}</span>
               <span class="small"
                 >{{ t("landing.decision") }}&nbsp; · &nbsp;{{
@@ -86,7 +85,7 @@
               >
             </div>
             <div class="row">
-              <span class="symbol">↗</span>
+              <span class="entry-index" aria-hidden="true">03</span>
               <span>{{ t("landing.what_we_learned_from_the_release") }}</span>
               <span class="small"
                 >{{ t("landing.lesson") }}&nbsp; · &nbsp;{{
@@ -161,9 +160,7 @@
           <h2>{{ t("landing.make_room_for_what_you_learn") }}</h2>
           <p>{{ t("landing.closing_description") }}</p>
         </div>
-        <a class="button" routerLink="/signup"
-          >{{ t("identity.register") }}<span aria-hidden="true">↗</span>
-        </a>
+        <a class="button" routerLink="/signup">{{ t("identity.register") }} </a>
       </div>
     </section>
   </main>
