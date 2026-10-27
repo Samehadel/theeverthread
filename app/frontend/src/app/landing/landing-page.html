@@ -3,11 +3,15 @@
   <header class="top" id="top">
     <nav class="wrap" aria-label="Main navigation">
       <a class="brand" href="#top"
-        ><span class="logo" aria-hidden="true"></span> {{ t("landing.theeverthread")
+        ><span class="logo" aria-hidden="true"></span>
+        {{ t("landing.theeverthread")
         }}<span style="color: var(--accent)">.</span>
       </a>
       <a class="navlink" href="#why">{{ t("landing.why_theeverthread") }}</a>
       <a class="navlink" href="#workflow">{{ t("landing.the_vision") }}</a>
+      <a class="navlink" href="#workspaces">{{
+        t("landing.workspaces_nav")
+      }}</a>
       <a class="navlink" routerLink="/login">{{ t("identity.login") }}</a>
       <a class="button secondary" routerLink="/signup"
         >{{ t("identity.register") }}<span aria-hidden="true">↗</span>
@@ -16,20 +20,17 @@
   </header>
   <main class="wrap" id="main" tabindex="-1">
     <section class="hero center">
-      <p class="eyebrow">{{ t("landing.workspaceal_memory_made_useful") }}</p>
+      <p class="eyebrow">{{ t("landing.knowledge_that_stays_with_you") }}</p>
       <h1>
-        {{ t("landing.great_teams_shouldn_t") }}<br />{{ t("landing.have_to")
-        }}<em>{{ t("landing.learn_twice") }}</em>
+        {{ t("landing.keep_what_you_learn") }}<br />{{ t("landing.build_on_it")
+        }}<em>{{ t("landing.every_day") }}</em>
       </h1>
       <p class="lead">{{ t("landing.hero_description") }}</p>
       <div class="actions">
         <a class="button" routerLink="/signup">{{ t("individual.signup") }}</a>
-        <a class="button" href="#workflow"
+        <a class="button secondary" href="#workflow"
           >{{ t("landing.explore_the_vision")
           }}<span aria-hidden="true">↗</span>
-        </a>
-        <a class="button secondary" href="#why"
-          >{{ t("landing.explore_the_idea") }}<span aria-hidden="true">↓</span>
         </a>
       </div>
     </section>
@@ -37,33 +38,34 @@
       <div class="preview">
         <div class="previewbar">
           <span class="dots" aria-hidden="true">● ● ●</span>
-          <span>{{ t("landing.acme_workspace_team_memory") }}</span>
+          <span>{{ t("landing.preview_workspace_path") }}</span>
           <span>{{ t("landing.illustrative_preview") }}</span>
         </div>
         <div class="app">
           <aside class="sidebar">
-            <strong>◈ &nbsp;{{ t("landing.acme_engineering") }}</strong>
+            <strong>◈ &nbsp;{{ t("landing.preview_workspace_name") }}</strong>
             <div class="sideitem active">
-              ◫ &nbsp;{{ t("landing.team_memory") }}
+              ◫ &nbsp;{{ t("landing.your_knowledge") }}
             </div>
-            <div class="sideitem">◇ &nbsp;{{ t("landing.decisions") }}</div>
-            <div class="sideitem">↗ &nbsp;{{ t("landing.sources") }}</div>
-            <div class="sideitem">◎ &nbsp;{{ t("landing.people") }}</div>
+            <div class="sideitem">
+              ◇ &nbsp;{{ t("landing.capture_knowledge") }}
+            </div>
+            <div class="sideitem">
+              ↗ &nbsp;{{ t("landing.browse_knowledge") }}
+            </div>
+            <div class="sideitem">
+              ◎ &nbsp;{{ t("landing.workspace_members") }}
+            </div>
           </aside>
           <div class="appmain">
             <div class="search">
-              <span
-                >⌕ &nbsp;{{
-                  t("landing.find_a_problem_decision_or_lesson")
-                }}</span
-              >
-              <span>{{ t("landing.preview_shortcut") }}</span>
+              <span>⌕ &nbsp;{{ t("landing.preview_context") }}</span>
             </div>
             <div class="appheading">
               <h2 class="preview-title">
                 {{ t("landing.knowledge_worth_keeping") }}
               </h2>
-              <span class="tag">{{ t("landing.team_memory") }}</span>
+              <span class="tag">{{ t("landing.your_knowledge") }}</span>
             </div>
             <div class="row">
               <span class="symbol">✓</span>
@@ -124,8 +126,31 @@
         </article>
         <article class="card">
           <span class="number">{{ t("landing.03_reuse") }}</span>
-          <h3>{{ t("landing.move_forward_together") }}</h3>
+          <h3>{{ t("landing.build_on_experience") }}</h3>
           <p>{{ t("landing.reuse_description") }}</p>
+        </article>
+      </div>
+    </section>
+    <section class="section" id="workspaces" aria-labelledby="workspaces-title">
+      <div class="sectionhead">
+        <div>
+          <p class="eyebrow">{{ t("landing.workspace_eyebrow") }}</p>
+          <h2 id="workspaces-title">{{ t("landing.workspace_title") }}</h2>
+        </div>
+        <p>{{ t("landing.workspace_intro") }}</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>{{ t("landing.workspace_start_title") }}</h3>
+          <p>{{ t("landing.workspace_start_description") }}</p>
+        </article>
+        <article class="card">
+          <h3>{{ t("landing.workspace_context_title") }}</h3>
+          <p>{{ t("landing.workspace_context_description") }}</p>
+        </article>
+        <article class="card">
+          <h3>{{ t("landing.workspace_share_title") }}</h3>
+          <p>{{ t("landing.workspace_share_description") }}</p>
         </article>
       </div>
     </section>
@@ -133,12 +158,11 @@
       <div class="cta">
         <div>
           <p class="eyebrow">{{ t("landing.a_better_starting_point") }}</p>
-          <h2>{{ t("landing.make_experience_a_team_asset") }}</h2>
+          <h2>{{ t("landing.make_room_for_what_you_learn") }}</h2>
           <p>{{ t("landing.closing_description") }}</p>
         </div>
-        <a class="button" href="#workflow"
-          >{{ t("landing.explore_the_vision")
-          }}<span aria-hidden="true">↗</span>
+        <a class="button" routerLink="/signup"
+          >{{ t("identity.register") }}<span aria-hidden="true">↗</span>
         </a>
       </div>
     </section>

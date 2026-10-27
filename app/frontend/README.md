@@ -9,7 +9,7 @@ npm run typecheck
 npm run build
 ```
 
-No backend, authentication, API, or external font service is required. All primary actions link to the illustrative product preview; enterprise registration belongs to BTF-5. The preview is static illustration, including its search and sidebar labels. English copy lives in `src/i18n/en.json`. Shared styles and semantic color tokens live in `src/styles.css`; a light theme is not shipped.
+The public page renders without a backend or external font service. Account actions use the unified `/signup` and `/login` journeys. The landing page introduces personal knowledge capture, isolated workspaces under one account, and optional collaboration. The preview is static illustration, including its search and sidebar labels. English copy lives in `src/i18n/en.json`. Shared styles and semantic color tokens live in `src/styles.css`; a light theme is not shipped.
 
 Architecture baseline: theeverthread-architecture `ab3aa138af3f1b0d23d12661cc1c5849ab54a5ab`. The story branch starts at develop `4851bf4` and includes the frontend bootstrap because no application is committed on that base. Existing staged foundation work is not included.
 
