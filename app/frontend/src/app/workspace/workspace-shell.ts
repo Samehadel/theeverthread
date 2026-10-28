@@ -66,6 +66,7 @@ export class WorkspaceShell {
   readonly section = computed(() => {
     if (this.url() === '/knowledge' || this.url().startsWith('/knowledge/'))
       return 'workspace.knowledge';
+    if (this.url() === '/workspace/settings') return 'workspaceSettings.title';
     if (this.url() === '/workspace/invitations') return 'invitations.formTitle';
     if (this.url().startsWith('/workspace/team')) return 'workspace.team';
     return 'workspace.home';

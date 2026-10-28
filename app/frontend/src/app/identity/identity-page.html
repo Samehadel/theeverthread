@@ -218,68 +218,23 @@
               </section>
             </div>
           }
-          @if (account.workspaceId && account.accessRole === "OWNER") {
-            <section
-              class="workspace-settings"
-              aria-labelledby="workspace-settings-title"
-            >
-              <div>
-                <p class="eyebrow">{{ t("workspace.settingsEyebrow") }}</p>
-                <h2 id="workspace-settings-title">
-                  {{ t("workspace.renameTitle") }}
-                </h2>
-                <p class="workspace-settings-description">
-                  {{ t("workspace.renameHint") }}
-                </p>
-              </div>
-              <form
-                [formGroup]="workspaceForm"
-                (ngSubmit)="renameWorkspace()"
-                class="workspace-rename-form"
-              >
-                <label for="workspace-name">{{
-                  t("identity.workspaceName")
-                }}</label>
-                <div class="workspace-rename-controls">
-                  <input
-                    id="workspace-name"
-                    class="identity-input"
-                    formControlName="name"
-                    [placeholder]="account.workspaceName ?? ''"
-                    maxlength="200"
-                    required
-                    [attr.aria-invalid]="
-                      workspaceForm.controls.name.touched &&
-                      workspaceForm.invalid
-                    "
-                    aria-describedby="workspace-name-hint"
-                  />
-                  <button class="button secondary" [disabled]="workspaceBusy()">
-                    {{
-                      t(
-                        workspaceBusy()
-                          ? "identity.working"
-                          : "workspace.renameAction"
-                      )
-                    }}
-                  </button>
-                </div>
-                <p id="workspace-name-hint" class="form-hint">
-                  {{ t("workspace.renameLimit") }}
-                </p>
-                @if (
-                  workspaceForm.controls.name.touched && workspaceForm.invalid
-                ) {
-                  <p role="alert" class="field-error">
-                    {{ t("workspace.renameInvalid") }}
-                  </p>
-                }
-                @if (workspaceError()) {
-                  <p role="alert" class="field-error">{{ workspaceError() }}</p>
-                }
-              </form>
-            </section>
-          }
+          <section
+            class="workspace-settings"
+            aria-labelledby="workspace-settings-title"
+          >
+            <div>
+              <p class="eyebrow">{{ t("workspace.settingsEyebrow") }}</p>
+              <h2 id="workspace-settings-title">
+                {{ t("workspaceSettings.title") }}
+              </h2>
+              <p class="workspace-settings-description">
+                {{ t("workspaceSettings.intro") }}
+              </p>
+            </div>
+            <a class="button secondary" routerLink="/workspace/settings">{{
+              t("workspaceSettings.manage")
+            }}</a>
+          </section>
           <p class="workspace-footer">{{ t("identity.home.footer") }}</p>
         } @else {
           <div class="workspace-empty">

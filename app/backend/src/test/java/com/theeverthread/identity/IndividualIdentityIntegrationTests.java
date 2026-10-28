@@ -164,7 +164,7 @@ class IndividualIdentityIntegrationTests {
         var repaired = identity.current("legacy@example.com");
         assertThat(repaired.defaultWorkspaceId()).isNotNull().isNotEqualTo(original.workspaceId());
         assertThat(repaired.workspaceId()).isEqualTo(repaired.defaultWorkspaceId());
-        assertThat(repaired.workspaceName()).isEqualTo("My workspace");
+        assertThat(repaired.workspaceName()).isEqualTo("My workspace (2)");
         assertThat(repaired.accessRole()).isEqualTo("OWNER");
         assertThat(repaired.workspaces()).hasSize(2);
         assertThat(identity.current("legacy@example.com").defaultWorkspaceId())
@@ -559,6 +559,120 @@ class IndividualIdentityIntegrationTests {
         code(
                 () -> workspaceService.select(original.email(), additional.workspaceId()),
                 "WORKSPACE_ACCESS_DENIED");
+    }
+
+    @Test
+    void workspaceNamesAreUniquePerOwnerIgnoringCaseAndSurroundingWhitespace() throws Exception {
+        activate("person@example.com");
+        activate("other@example.com");
+        var first = workspaceService.create("person@example.com", "  Design  ");
+        assertThat(first.workspaceName()).isEqualTo("Design");
+        code(() -> workspaceService.create("person@example.com", "dEsIgN"), "WORKSPACE_NAME_TAKEN");
+        code(
+                () -> workspaceService.create("person@example.com", " MY WORKSPACE "),
+                "WORKSPACE_NAME_TAKEN");
+        assertThat(workspaceService.create("other@example.com", "design").workspaceName())
+                .isEqualTo("design");
+        assertThat(
+                        workspaceService
+                                .rename("person@example.com", first.workspaceId(), "DESIGN")
+                                .workspaceName())
+                .isEqualTo("DESIGN");
+        var second = workspaceService.create("person@example.com", "Research");
+        code(
+                () ->
+                        workspaceService.rename(
+                                "person@example.com", second.workspaceId(), " design "),
+                "WORKSPACE_NAME_TAKEN");
+        assertThat(
+                        workspaceService
+                                .select("person@example.com", second.workspaceId())
+                                .workspaceName())
+                .isEqualTo("Research");
+        mvc.perform(
+                        post("/api/workspaces")
+                                .with(user("person@example.com"))
+                                .with(csrf())
+                                .contentType("application/json")
+                                .content("{\"name\":\"design\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("WORKSPACE_NAME_TAKEN"));
+        mvc.perform(
+                        patch("/api/workspaces/" + second.workspaceId())
+                                .with(user("person@example.com"))
+                                .with(csrf())
+                                .contentType("application/json")
+                                .content("{\"name\":\"DESIGN\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void membersCannotRenameAndTheirWorkspaceNamesDoNotReserveOwnedNames() {
+        activate("person@example.com");
+        activate("other@example.com");
+        var shared = workspaceService.create("other@example.com", "Design");
+        var person = identity.current("person@example.com");
+        jdbc.update(
+                "INSERT INTO WORKSPACE_MEMBERSHIP(ACCOUNT_ID, WORKSPACE_ID, ROLE, ACTIVE) VALUES"
+                    + " (?, ?, 'MEMBER', TRUE)",
+                person.id(),
+                shared.workspaceId());
+        code(
+                () -> workspaceService.rename(person.email(), shared.workspaceId(), "Renamed"),
+                "WORKSPACE_ACCESS_DENIED");
+        assertThat(workspaceService.create(person.email(), "design").workspaceName())
+                .isEqualTo("design");
+    }
+
+    @Test
+    void concurrentCreateAndRenameCannotClaimTheSameOwnedName() throws Exception {
+        activate("person@example.com");
+        var existing = workspaceService.create("person@example.com", "Research");
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var create =
+                    executor.submit(
+                            () ->
+                                    claimName(
+                                            ready,
+                                            start,
+                                            () ->
+                                                    workspaceService.create(
+                                                            "person@example.com", "Design")));
+            var rename =
+                    executor.submit(
+                            () ->
+                                    claimName(
+                                            ready,
+                                            start,
+                                            () ->
+                                                    workspaceService.rename(
+                                                            "person@example.com",
+                                                            existing.workspaceId(),
+                                                            "dEsIgN")));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(create.get(20, TimeUnit.SECONDS), rename.get(20, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder("SAVED", "WORKSPACE_NAME_TAKEN");
+        }
+        assertThat(
+                        identity.current("person@example.com").workspaces().stream()
+                                .filter(workspace -> workspace.name().equalsIgnoreCase("design"))
+                                .count())
+                .isEqualTo(1);
+    }
+
+    private String claimName(CountDownLatch ready, CountDownLatch start, Runnable operation)
+            throws Exception {
+        ready.countDown();
+        if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Start timed out");
+        try {
+            operation.run();
+            return "SAVED";
+        } catch (IdentityException failure) {
+            return failure.code();
+        }
     }
 
     Long workspaceFor(String email) {

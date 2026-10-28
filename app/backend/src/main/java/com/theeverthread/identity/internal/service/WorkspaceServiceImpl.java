@@ -31,6 +31,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     public AccountView rename(String email, Long id, String name) {
         validate(name);
         var member = access.require(email, id, true);
+        access.requireUniqueName(member.getAccount(), name.trim(), id);
         member.getWorkspace().setName(name.trim());
         return access.view(member.getAccount(), id);
     }

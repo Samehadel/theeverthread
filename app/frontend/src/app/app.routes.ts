@@ -63,6 +63,13 @@ export const routes: Routes = [
     pathMatch: 'full',
   },
   {
+    path: 'workspace/settings',
+    loadComponent: () =>
+      import('./workspace/workspace-settings-page').then(
+        (m) => m.WorkspaceSettingsPage,
+      ),
+  },
+  {
     path: 'workspace/team',
     providers: [TeamManagementStore],
     loadComponent: () =>

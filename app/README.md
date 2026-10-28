@@ -384,7 +384,7 @@ Its request/response logging is available at DEBUG via
 
 ## Accounts and workspaces
 
-`/signup` requests full name, email and password. Email activation creates a ready-to-use default workspace. `/register` redirects to signup; the organization registration flow is removed. The workspace picker selects among memberships, and `/workspace` offers owner-only rename. Signup assigns the default workspace automatically; users do not need a create-workspace step.
+`/signup` requests full name, email and password. Email activation creates a ready-to-use default workspace. `/register` redirects to signup; the organization registration flow is removed. The workspace picker selects among memberships. Open **Workspaces** in the navigation (`/workspace/settings`) to create a workspace or rename one you own. Names are unique per owner, ignoring capitalization and surrounding whitespace; successful changes update the existing picker. Signup assigns the default workspace automatically; users do not need a create-workspace step.
 
 Workspace invitations add membership alongside the default workspace. Existing accounts sign in and explicitly accept; pending accounts use their original password. Invitations never replace credentials or existing memberships. New social signup is unavailable in this delivery; stored provider links and trusted linking/login support remain intact.
 

@@ -2583,6 +2583,49 @@ figure.knowledge-code {
   color: #efa9b4;
 }
 
+/* Workspace management keeps forms and membership details readable at every width. */
+.workspace-management {
+  width: 100%;
+}
+.workspace-management-list {
+  list-style: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.workspace-management-row {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.workspace-management-row + .workspace-management-row {
+  border-top: 1px solid var(--line);
+}
+.workspace-management-name {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.workspace-management-row .workspace-rename-form {
+  flex: 1;
+  max-width: 580px;
+}
+@media (max-width: 850px) {
+  .workspace-management-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+  .workspace-management-row .workspace-rename-form {
+    max-width: none;
+  }
+}
+
 /* A continuous thread and an index give the landing preview a notebook rhythm. */
 .landing-top .logo {
   width: 30px;
