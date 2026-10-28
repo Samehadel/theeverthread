@@ -34,13 +34,21 @@ class SmtpVerificationMailTests {
         verify(sender).send(message.capture());
         assertThat(message.getValue().getAllRecipients()[0].toString())
                 .isEqualTo("ada@example.com");
-        assertThat(message.getValue().getContent().toString())
+        var parts = new java.util.ArrayList<String>();
+        collect(message.getValue().getContent(), parts);
+        assertThat(parts).hasSize(2);
+        assertThat(parts.get(1))
+                .contains("Verify email", "background: #6850a3", "name=\"viewport\"")
+                .contains("href=\"https://theeverthread.example/verify#123.test-token\"")
+                .contains("24 hours", "If you did not register")
+                .doesNotContain("{{");
+        assertThat(parts.get(0))
                 .contains("https://theeverthread.example/verify#" + id + ".test-token")
                 .contains("24 hours");
     }
 
     @Test
-    void deliveryFailureIsSafeAndTypedForPersistingFailureState() {
+    void deliveryFailureIsSafeAndTypedForPersistingFailureState() throws Exception {
         var sender = mock(JavaMailSender.class);
         when(sender.createMimeMessage())
                 .thenReturn(new MimeMessage(Session.getInstance(new Properties())));
@@ -59,7 +67,7 @@ class SmtpVerificationMailTests {
     }
 
     @Test
-    void brevoRequiresAConfiguredSenderInsteadOfTheLocalDefault() {
+    void brevoRequiresAConfiguredSenderInsteadOfTheLocalDefault() throws Exception {
         var sender = mock(JavaMailSender.class);
         var mail =
                 new SmtpVerificationMail(
@@ -74,5 +82,15 @@ class SmtpVerificationMailTests {
                                 assertThat(exception.failureCode())
                                         .isEqualTo("SMTP_FROM_NOT_CONFIGURED"));
         verifyNoInteractions(sender);
+    }
+
+    private static void collect(Object content, java.util.List<String> parts) throws Exception {
+        if (content instanceof jakarta.mail.Multipart multipart) {
+            for (int i = 0; i < multipart.getCount(); i++) {
+                collect(multipart.getBodyPart(i).getContent(), parts);
+            }
+        } else if (content instanceof String text) {
+            parts.add(text);
+        }
     }
 }
