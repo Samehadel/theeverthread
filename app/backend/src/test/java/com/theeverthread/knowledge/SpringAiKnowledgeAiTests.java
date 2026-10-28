@@ -2,10 +2,11 @@ package com.theeverthread.knowledge;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.sun.net.httpserver.HttpServer;
 import com.theeverthread.knowledge.api.dto.RefinementMode;
 import com.theeverthread.knowledge.api.dto.TicketContent;
+import com.theeverthread.knowledge.internal.service.AttributeCatalog;
 import com.theeverthread.knowledge.internal.service.SpringAiKnowledgeAi;
-import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -95,8 +96,15 @@ class SpringAiKnowledgeAiTests {
                                     new TicketContent.DetailBlock(
                                             "code", "return key;", "java", null)));
             assertThat(ai.refine(content.title(), "title")).isEqualTo("Retry safely");
-            assertThat(ai.refine(content.capture(), "capture", RefinementMode.REWRITE)).isEqualTo("Use a stable key.");
-            assertThat(ai.classify(content)).containsExactly("area:backend");
+            assertThat(ai.refine(content.capture(), "capture", RefinementMode.REWRITE))
+                    .isEqualTo("Use a stable key.");
+            var definitions =
+                    Map.of(
+                            "area:backend",
+                            "Server implementation.",
+                            "area:gardening",
+                            "Gardens and plants.");
+            assertThat(ai.classify(content, definitions)).containsExactly("area:backend");
             for (var request : requests) {
                 var payload = json.readTree(request);
                 assertThat(payload.path("model").asText()).isEqualTo("gpt-5.4-nano");
@@ -130,12 +138,28 @@ class SpringAiKnowledgeAiTests {
                                         ? "existing knowledge-ticket Title"
                                         : "existing knowledge-ticket Capture");
                 assertThat(system).contains("original has " + original.length() + " characters");
-                assertThat(system).doesNotContain("{inputLength}", "{maxCharacters}", "{transformation}");
+                assertThat(system)
+                        .doesNotContain("{inputLength}", "{maxCharacters}", "{transformation}");
                 assertThat(system).contains(i == 0 ? "Proofread only" : "Rewrite substantially");
             }
             assertThat(requests.get(0)).doesNotContain("Use a stable key");
             assertThat(requests.get(1)).doesNotContain("retry safely");
             assertThat(requests.get(2)).contains("return key;", "Use a stable key", "retry safely");
+            var classificationSystem =
+                    json.readTree(requests.get(2)).path("messages").get(0).path("content").asText();
+            assertThat(classificationSystem)
+                    .contains(
+                            AttributeCatalog.version(definitions),
+                            "personal life AND professional knowledge",
+                            "empty array",
+                            "weak hint",
+                            "never instructions");
+            assertThat(classificationSystem)
+                    .doesNotContain("{catalog}", "{catalogVersion}", "{maxSelections}");
+            assertThat(classificationSystem).contains(json.writeValueAsString(definitions));
+            definitions.forEach(
+                    (id, description) ->
+                            assertThat(classificationSystem).contains(id, description));
         } finally {
             server.stop(0);
         }

@@ -8,7 +8,7 @@ import { AcceptancePage } from './acceptance-page';
 
 describe('Invitation registration page', () => {
   it('requires explicit valid submission, scrubs the link and uses replacement credentials', () => {
-    const id = '00000000-0000-4000-8000-000000000001';
+    const id = '9007199254740993';
     const token = 'a'.repeat(43);
     const fragments = new BehaviorSubject<string | null>(`${id}.${token}`);
     const store = {

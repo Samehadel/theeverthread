@@ -3,8 +3,6 @@ package com.theeverthread.identity.api.service;
 import com.theeverthread.identity.api.dto.*;
 import com.theeverthread.identity.api.dto.IdentityViews.*;
 
-import java.util.UUID;
-
 public interface IdentityService {
     PendingView register(RegistrationRequest request);
 
@@ -12,11 +10,11 @@ public interface IdentityService {
 
     PendingView resend(String email);
 
-    VerificationView verify(UUID id, String token);
+    VerificationView verify(Long id, String token);
 
     CredentialsView credentials(String email);
 
     AccountView current(String email);
 
-    AccountView current(String email, UUID workspaceId);
+    AccountView current(String email, Long workspaceId);
 }

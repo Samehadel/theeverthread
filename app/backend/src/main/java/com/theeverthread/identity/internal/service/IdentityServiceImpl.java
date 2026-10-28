@@ -57,7 +57,6 @@ public class IdentityServiceImpl implements IdentityService {
             throw emailInUse();
         }
         var account = new AccountEntity();
-        account.setId(UUID.randomUUID());
         account.setEmail(email);
         account.setFullName(request.fullName().trim());
         account.setPasswordHash(passwords.encode(request.password()));
@@ -133,7 +132,7 @@ public class IdentityServiceImpl implements IdentityService {
 
     @Override
     @Transactional
-    public VerificationView verify(UUID id, String token) {
+    public VerificationView verify(Long id, String token) {
         String email = accounts.emailForId(id).orElseThrow(IdentityServiceImpl::invalidLink);
         locks.lock("email:" + email);
         var account = accounts.findById(id).orElseThrow(IdentityServiceImpl::invalidLink);
@@ -182,7 +181,7 @@ public class IdentityServiceImpl implements IdentityService {
 
     @Override
     @Transactional(readOnly = true)
-    public AccountView current(String email, UUID workspaceId) {
+    public AccountView current(String email, Long workspaceId) {
         var membership = workspaces.require(email, workspaceId, false);
         return workspaces.view(membership.getAccount(), workspaceId);
     }

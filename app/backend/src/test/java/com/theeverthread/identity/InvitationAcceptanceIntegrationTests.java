@@ -41,20 +41,32 @@ class InvitationAcceptanceIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired IdentityService identity;
-    @Autowired InvitationService invitations;
-    @Autowired InvitationAcceptanceService acceptance;
-    @Autowired VerificationEmailTransactions delivery;
-    @Autowired VerificationEmailWorker worker;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired MockMvc mvc;
+    @Autowired
+
+    IdentityService identity;
+    @Autowired
+    InvitationService invitations;
+    @Autowired
+    InvitationAcceptanceService acceptance;
+    @Autowired
+    VerificationEmailTransactions delivery;
+    @Autowired
+    VerificationEmailWorker worker;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    MockMvc mvc;
 
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     com.theeverthread.foundation.internal.security.SessionLogin sessionLogin;
 
-    @MockitoBean VerificationMail verification;
-    @MockitoBean InvitationMail mail;
-    @MockitoBean Clock clock;
+    @MockitoBean
+
+    VerificationMail verification;
+    @MockitoBean
+    InvitationMail mail;
+    @MockitoBean
+    Clock clock;
     final Instant now = Instant.parse("2026-10-07T08:00:00Z");
 
     @BeforeEach
@@ -70,7 +82,7 @@ class InvitationAcceptanceIntegrationTests {
     void admin(String email, String domain) {
         identity.register(new RegistrationRequest("Ada", email, "Validpass!"));
         var link = new String[1];
-        var id = new UUID[1];
+        var id = new Long[1];
         doAnswer(
                         call -> {
                             id[0] = call.getArgument(1);
@@ -177,7 +189,7 @@ class InvitationAcceptanceIntegrationTests {
         rejected(link, "INVITATION_UNUSABLE");
         var replacement = invite("admin@example.com", "alice@example.com");
         rejected(link, "INVALID_INVITATION");
-        rejected(new InvitationLinkRequest(UUID.randomUUID(), link.token()), "INVALID_INVITATION");
+        rejected(new InvitationLinkRequest(Long.MAX_VALUE, link.token()), "INVALID_INVITATION");
         assertThat(acceptance.preview(replacement).status()).isEqualTo("READY");
     }
 
@@ -187,7 +199,7 @@ class InvitationAcceptanceIntegrationTests {
                 new RegistrationRequest("Old profile", "alice@example.com", "Oldpassword!"));
         var accountId =
                 jdbc.queryForObject(
-                        "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", UUID.class);
+                        "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", Long.class);
         var attempt = delivery.claim(accountId);
         var link = invite("admin@example.com", "alice@example.com");
         assertThat(acceptance.preview(link).status()).isEqualTo("READY");
@@ -407,7 +419,7 @@ class InvitationAcceptanceIntegrationTests {
         identity.register(new RegistrationRequest("Alice", "alice@example.com", "Oldpassword!"));
         var accountId =
                 jdbc.queryForObject(
-                        "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", UUID.class);
+                        "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", Long.class);
         var attempt = delivery.claim(accountId);
         var token = "v".repeat(43);
         delivery.accepted(attempt, token, "<verification@test.local>");

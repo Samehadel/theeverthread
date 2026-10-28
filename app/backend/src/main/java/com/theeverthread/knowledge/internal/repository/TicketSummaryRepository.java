@@ -13,7 +13,6 @@ import tools.jackson.databind.json.JsonMapper;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @Repository
 @RequiredArgsConstructor
@@ -22,7 +21,7 @@ public class TicketSummaryRepository {
 
     /** Selects only summary fields and applies tenant/type constraints before the keyset limit. */
     public List<TicketSummary> browse(
-            UUID workspace, UUID accountId, String type, TicketCursor cursor, int limit) {
+            Long workspace, Long accountId, String type, TicketCursor cursor, int limit) {
         var sql =
                 new StringBuilder(
                         """
@@ -50,7 +49,7 @@ public class TicketSummaryRepository {
                 sql.toString(),
                 (row, index) ->
                         new TicketSummary(
-                                row.getObject("ID", UUID.class),
+                                row.getObject("ID", Long.class),
                                 row.getString("TITLE"),
                                 row.getString("CAPTURE_PREVIEW"),
                                 row.getString("DETAILS_TYPE"),

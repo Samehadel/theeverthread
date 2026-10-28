@@ -6,14 +6,15 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "ACCOUNT")
 @Getter
 @Setter
 public class AccountEntity {
-    @Id private UUID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(nullable = false, unique = true, length = 254)
     private String email;

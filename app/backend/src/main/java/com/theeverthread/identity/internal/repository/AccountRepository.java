@@ -8,15 +8,15 @@ import org.springframework.data.jpa.repository.*;
 import java.time.Instant;
 import java.util.*;
 
-public interface AccountRepository extends JpaRepository<AccountEntity, UUID> {
+public interface AccountRepository extends JpaRepository<AccountEntity, Long> {
     Optional<AccountEntity> findByEmail(String email);
 
     @Query("select a.email from AccountEntity a where a.id = :id")
-    Optional<String> emailForId(UUID id);
+    Optional<String> emailForId(Long id);
 
     @Query(
             "select a.email from AccountEntity a where a.status ="
-                + " com.theeverthread.identity.internal.entity.AccountStatus.PENDING and a.updatedAt <"
-                + " :cutoff order by a.updatedAt")
+                + " com.theeverthread.identity.internal.entity.AccountStatus.PENDING and"
+                + " a.updatedAt < :cutoff order by a.updatedAt")
     List<String> abandonedEmails(Instant cutoff, Pageable page);
 }

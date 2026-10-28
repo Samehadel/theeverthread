@@ -2582,3 +2582,117 @@ figure.knowledge-code {
 :is(.knowledge-code, .document-canvas pre) .hljs-tag {
   color: #efa9b4;
 }
+
+/* Workspace management keeps forms and membership details readable at every width. */
+.workspace-management {
+  width: 100%;
+}
+.workspace-management-list {
+  list-style: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.workspace-management-row {
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.workspace-management-row + .workspace-management-row {
+  border-top: 1px solid var(--line);
+}
+.workspace-management-name {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.workspace-management-row .workspace-rename-form {
+  flex: 1;
+  max-width: 580px;
+}
+@media (max-width: 850px) {
+  .workspace-management-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+  }
+  .workspace-management-row .workspace-rename-form {
+    max-width: none;
+  }
+}
+
+/* A continuous thread and an index give the landing preview a notebook rhythm. */
+.landing-top .logo {
+  width: 30px;
+  height: 26px;
+  background: transparent;
+  transform: none;
+  border: 2px solid var(--accent);
+  border-radius: 50% 50% 45% 45%;
+}
+.landing-top .logo::after {
+  width: 18px;
+  height: 26px;
+  top: -2px;
+  left: 4px;
+  background: transparent;
+  box-shadow: none;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  transform: rotate(35deg);
+}
+.landing-page .lead {
+  text-wrap: balance;
+}
+.landing-page .eyebrow::before {
+  display: none;
+}
+.thread-line {
+  width: 64px;
+  height: 12px;
+  border-bottom: 1px solid var(--accent);
+  border-radius: 0 0 50% 50%;
+  transform: rotate(-8deg);
+}
+.preview-context {
+  padding-bottom: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.entry-index {
+  flex: 0 0 28px;
+  color: var(--accent);
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+.landing-page .row {
+  position: relative;
+  padding-left: 12px;
+}
+.landing-page .row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-left: 1px solid var(--accent);
+  opacity: 0.45;
+}
+.landing-page .row:last-child::before {
+  bottom: 50%;
+}
+
+.landing-page .sectionhead-stacked {
+  display: block;
+}
+.landing-page .sectionhead-stacked > p {
+  max-width: none;
+  margin: 16px 0 0;
+}

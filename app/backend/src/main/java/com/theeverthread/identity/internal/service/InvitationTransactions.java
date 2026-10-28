@@ -33,7 +33,7 @@ public class InvitationTransactions {
 
     public record Claim(InvitationView view, String workspaceName, String administratorName) {}
 
-    private MembershipEntity administrator(String email, UUID workspaceId) {
+    private MembershipEntity administrator(String email, Long workspaceId) {
         return access.require(email, workspaceId, true);
     }
 
@@ -47,8 +47,7 @@ public class InvitationTransactions {
     }
 
     @Transactional
-    public Claim claim(
-            String actor, java.util.UUID workspaceId, InvitationRequest request, String token) {
+    public Claim claim(String actor, Long workspaceId, InvitationRequest request, String token) {
         var admin = administrator(actor, workspaceId);
         String email = recipient(request);
         // Acceptance must acquire these locks in the same order.
@@ -80,9 +79,6 @@ public class InvitationTransactions {
         }
         requireCapacity(admin);
         var invitation = existing == null ? new InvitationEntity() : existing;
-        if (existing == null) {
-            invitation.setId(UUID.randomUUID());
-        }
         invitation.setWorkspace(admin.getWorkspace());
         invitation.setEmail(email);
         invitation.setAdministratorId(admin.getAccount().getId());
@@ -100,7 +96,7 @@ public class InvitationTransactions {
     }
 
     @Transactional
-    public InvitationView complete(UUID id, String token, String messageId, String failure) {
+    public InvitationView complete(Long id, String token, String messageId, String failure) {
         locks.lock("email:" + invitations.emailForId(id).orElseThrow());
         var invitation = invitations.findById(id).orElseThrow();
         if (!"SENDING".equals(invitation.getStatus())
@@ -152,7 +148,7 @@ public class InvitationTransactions {
     }
 
     @Transactional(readOnly = true)
-    public List<InvitationView> sent(String actor, java.util.UUID workspaceId) {
+    public List<InvitationView> sent(String actor, Long workspaceId) {
         var admin = administrator(actor, workspaceId);
         return invitations.managementRecords(admin.getWorkspace().getId(), clock.instant()).stream()
                 .map(this::view)
@@ -160,7 +156,7 @@ public class InvitationTransactions {
     }
 
     @Transactional(readOnly = true)
-    public List<ActiveMemberView> members(String actor, java.util.UUID workspaceId) {
+    public List<ActiveMemberView> members(String actor, Long workspaceId) {
         var admin = administrator(actor, workspaceId);
         return memberships.findByWorkspaceIdAndActiveTrue(admin.getWorkspace().getId()).stream()
                 .filter(m -> m.getAccount().isActive())
@@ -180,7 +176,7 @@ public class InvitationTransactions {
 
     /** Reserves a replacement without changing the current link or its acceptance state. */
     @Transactional
-    public Claim claimResend(String actor, java.util.UUID workspaceId, UUID id, String token) {
+    public Claim claimResend(String actor, Long workspaceId, Long id, String token) {
         var admin = administrator(actor, workspaceId);
         String email = invitations.emailForId(id).orElseThrow(this::notFound);
         locks.lock("email:" + email);
@@ -225,7 +221,7 @@ public class InvitationTransactions {
 
     /** Serializes promotion with acceptance; an accepted invitation can never be reopened. */
     @Transactional
-    public InvitationView completeResend(UUID id, String token, String messageId, String failure) {
+    public InvitationView completeResend(Long id, String token, String messageId, String failure) {
         locks.lock("email:" + invitations.emailForId(id).orElseThrow(this::notFound));
         var invitation = invitations.findById(id).orElseThrow(this::notFound);
         locks.lock("workspace:" + invitation.getWorkspace().getId());
@@ -281,7 +277,7 @@ public class InvitationTransactions {
     }
 
     @Transactional(readOnly = true)
-    public InvitationPageView history(String actor, java.util.UUID workspaceId, int page) {
+    public InvitationPageView history(String actor, Long workspaceId, int page) {
         var admin = administrator(actor, workspaceId);
         if (page < 0 || page > Integer.MAX_VALUE / 25) {
             throw new IdentityException(400, "INVALID_REQUEST", "Choose a valid invitation page.");
@@ -297,8 +293,7 @@ public class InvitationTransactions {
     }
 
     @Transactional(readOnly = true)
-    public InvitationView status(
-            String actor, java.util.UUID workspaceId, InvitationRequest request) {
+    public InvitationView status(String actor, Long workspaceId, InvitationRequest request) {
         var admin = administrator(actor, workspaceId);
         return invitations
                 .findByWorkspaceIdAndEmail(admin.getWorkspace().getId(), recipient(request))

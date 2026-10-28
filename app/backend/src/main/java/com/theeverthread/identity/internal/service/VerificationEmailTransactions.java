@@ -29,10 +29,10 @@ public class VerificationEmailTransactions {
         this.clock = clock;
     }
 
-    public record Attempt(UUID accountId, String recipient, UUID attemptId) {}
+    public record Attempt(Long accountId, String recipient, UUID attemptId) {}
 
     @Transactional(readOnly = true)
-    public List<UUID> due() {
+    public List<Long> due() {
         return emails.due(
                 List.of(EmailDeliveryStatus.PENDING, EmailDeliveryStatus.FAILED),
                 clock.instant(),
@@ -40,7 +40,7 @@ public class VerificationEmailTransactions {
     }
 
     @Transactional
-    public Attempt claim(UUID id) {
+    public Attempt claim(Long id) {
         var email = accounts.emailForId(id);
         if (email.isEmpty()) {
             return null;

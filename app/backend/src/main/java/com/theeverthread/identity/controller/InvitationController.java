@@ -19,28 +19,28 @@ public class InvitationController {
 
     @GetMapping("/sent")
     public java.util.List<InvitationView> sent(
-            Principal principal, @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId) {
+            Principal principal, @RequestHeader("X-Workspace-Id") Long workspaceId) {
         return invitations.sent(principal.getName(), workspaceId);
     }
 
     @GetMapping("/members")
     public java.util.List<ActiveMemberView> members(
-            Principal principal, @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId) {
+            Principal principal, @RequestHeader("X-Workspace-Id") Long workspaceId) {
         return invitations.members(principal.getName(), workspaceId);
     }
 
     @PostMapping("/{id}/resend")
     public InvitationView resend(
             Principal principal,
-            @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId,
-            @PathVariable java.util.UUID id) {
+            @RequestHeader("X-Workspace-Id") Long workspaceId,
+            @PathVariable Long id) {
         return invitations.resend(principal.getName(), workspaceId, id);
     }
 
     @GetMapping
     public InvitationPageView history(
             Principal principal,
-            @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId,
+            @RequestHeader("X-Workspace-Id") Long workspaceId,
             @RequestParam(defaultValue = "0") int page) {
         return invitations.history(principal.getName(), workspaceId, page);
     }
@@ -48,7 +48,7 @@ public class InvitationController {
     @PostMapping
     public InvitationView send(
             Principal principal,
-            @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId,
+            @RequestHeader("X-Workspace-Id") Long workspaceId,
             @Valid @RequestBody InvitationRequest request) {
         return invitations.send(principal.getName(), workspaceId, request);
     }
@@ -56,7 +56,7 @@ public class InvitationController {
     @PostMapping("/status")
     public InvitationView status(
             Principal principal,
-            @RequestHeader("X-Workspace-Id") java.util.UUID workspaceId,
+            @RequestHeader("X-Workspace-Id") Long workspaceId,
             @Valid @RequestBody InvitationRequest request) {
         return invitations.status(principal.getName(), workspaceId, request);
     }

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -19,7 +20,7 @@ public class ClassificationTransactions {
     private final JdbcTemplate jdbc;
     private final JsonMapper json;
 
-    public record Work(UUID id, UUID token, TicketContent content) {}
+    public record Work(Long id, UUID token, TicketContent content) {}
 
     /** Durable leases recover abandoned work; token checks fence late worker responses. */
     @Transactional
@@ -44,7 +45,7 @@ public class ClassificationTransactions {
                         """,
                         (rs, row) ->
                                 new Work(
-                                        rs.getObject(1, UUID.class),
+                                        rs.getObject(1, Long.class),
                                         rs.getObject(2, UUID.class),
                                         json.readValue(rs.getString(3), TicketContent.class)),
                         UUID.randomUUID());
@@ -52,12 +53,14 @@ public class ClassificationTransactions {
     }
 
     @Transactional
-    public void complete(Work work, List<String> attributes) {
-        var valid = AttributeCatalog.validate(attributes);
+    public void complete(Work work, List<String> attributes, Map<String, String> definitions) {
+        var valid = AttributeCatalog.validate(attributes, definitions);
         jdbc.update(
-                "UPDATE KNOWLEDGE_TICKET SET ATTRIBUTES=?, CLASSIFICATION_STATUS='COMPLETE',"
-                        + " LEASE_TOKEN=NULL, LEASE_UNTIL=NULL WHERE ID=? AND LEASE_TOKEN=?",
+                "UPDATE KNOWLEDGE_TICKET SET ATTRIBUTES=?, CLASSIFICATION_VERSION=?,"
+                    + " CLASSIFICATION_STATUS='COMPLETE', LEASE_TOKEN=NULL, LEASE_UNTIL=NULL WHERE"
+                    + " ID=? AND LEASE_TOKEN=?",
                 json.writeValueAsString(valid),
+                AttributeCatalog.version(definitions),
                 work.id(),
                 work.token());
     }

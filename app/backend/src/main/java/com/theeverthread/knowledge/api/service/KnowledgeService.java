@@ -2,15 +2,17 @@ package com.theeverthread.knowledge.api.service;
 
 import com.theeverthread.knowledge.api.dto.*;
 
-import java.util.UUID;
+import java.util.Map;
 
 public interface KnowledgeService {
-    TicketView create(String email, UUID workspaceId, CreateTicketRequest request);
+    Map<String, String> attributes(String email, Long workspaceId);
+
+    TicketView create(String email, Long workspaceId, CreateTicketRequest request);
 
     TicketPage browse(
-            String email, UUID workspaceId, String detailsType, Integer limit, String cursor);
+            String email, Long workspaceId, String detailsType, Integer limit, String cursor);
 
-    TicketView get(String email, UUID workspaceId, UUID id);
+    TicketView get(String email, Long workspaceId, Long id);
 
-    RefinementView refine(String email, UUID workspaceId, RefinementRequest request);
+    RefinementView refine(String email, Long workspaceId, RefinementRequest request);
 }

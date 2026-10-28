@@ -46,44 +46,55 @@ class KnowledgeIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired KnowledgeService knowledge;
-    @Autowired ClassificationWorker worker;
-    @Autowired ClassificationTransactions transactions;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired MockMvc mvc;
-    @Autowired JsonMapper json;
-    @MockitoBean KnowledgeAi ai;
-    UUID workspace;
-    UUID author;
+    @Autowired
+    KnowledgeService knowledge;
+    @Autowired
+    ClassificationWorker worker;
+    @Autowired
+    ClassificationTransactions transactions;
+    @Autowired
+    JdbcTemplate jdbc;
+    @Autowired
+    AttributeCatalog catalog;
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    JsonMapper json;
+    @MockitoBean
+    KnowledgeAi ai;
+    Long workspace;
+    Long author;
 
     @BeforeEach
     void setup() {
         jdbc.execute("TRUNCATE KNOWLEDGE_TICKET, ACCOUNT, WORKSPACE CASCADE");
-        workspace = UUID.randomUUID();
+        workspace = createWorkspace();
         author = seed("member@example.com", "MEMBER", workspace);
         seed("admin@example.com", "ADMIN", workspace);
-        seed("outsider@example.com", "MEMBER", UUID.randomUUID());
+        seed("outsider@example.com", "MEMBER", createWorkspace());
     }
 
-    UUID seed(String email, String role, UUID org) {
+    Long createWorkspace() {
+        return jdbc.queryForObject(
+                "INSERT INTO WORKSPACE (NAME, STATUS) VALUES ('Shared workspace', 'ACTIVE')"
+                        + " RETURNING ID",
+                Long.class);
+    }
+
+    Long seed(String email, String role, Long workspaceId) {
+        var id =
+                jdbc.queryForObject(
+                        "INSERT INTO ACCOUNT (EMAIL, FULL_NAME, PASSWORD_HASH, STATUS,"
+                                + " DEFAULT_WORKSPACE_ID, UPDATED_AT) VALUES (?, 'Ada', 'unused',"
+                                + " 'ACTIVE', ?, CURRENT_TIMESTAMP) RETURNING ID",
+                        Long.class,
+                        email,
+                        workspaceId);
         jdbc.update(
-                "INSERT INTO WORKSPACE (ID, NAME, STATUS) VALUES (?, 'Shared workspace', 'ACTIVE')"
-                    + " ON CONFLICT DO NOTHING",
-                org);
-        var id = UUID.randomUUID();
-        jdbc.update(
-                "INSERT INTO ACCOUNT (ID, EMAIL, FULL_NAME, PASSWORD_HASH, STATUS,"
-                    + " DEFAULT_WORKSPACE_ID, UPDATED_AT) VALUES (?, ?, 'Ada', 'unused', 'ACTIVE',"
-                    + " ?, CURRENT_TIMESTAMP)",
+                "INSERT INTO WORKSPACE_MEMBERSHIP (ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (?, ?,"
+                        + " ?)",
                 id,
-                email,
-                org);
-        jdbc.update(
-                "INSERT INTO WORKSPACE_MEMBERSHIP (ID, ACCOUNT_ID, WORKSPACE_ID, ROLE) VALUES (?,"
-                    + " ?, ?, ?)",
-                UUID.randomUUID(),
-                id,
-                org,
+                workspaceId,
                 "ADMIN".equals(role) ? "OWNER" : "MEMBER");
         return id;
     }
@@ -100,6 +111,22 @@ class KnowledgeIntegrationTests {
 
     CreateTicketRequest request() {
         return new CreateTicketRequest(UUID.randomUUID(), content());
+    }
+
+    @Test
+    void serializesGeneratedBigintIdsAsStringsBeyondJavascriptPrecision() throws Exception {
+        jdbc.execute("ALTER TABLE KNOWLEDGE_TICKET ALTER COLUMN ID RESTART WITH 9007199254740993");
+        var created = knowledge.create("member@example.com", workspace, request());
+        assertThat(created.id()).isEqualTo(9007199254740993L);
+        mvc.perform(
+                        get("/api/knowledge/tickets/" + created.id())
+                                .with(user("member@example.com"))
+                                .header("X-Workspace-Id", workspace))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("9007199254740993"))
+                .andExpect(jsonPath("$.data.authorId").value(author.toString()));
+        var next = knowledge.create("member@example.com", workspace, request());
+        assertThat(next.id()).isEqualTo(created.id() + 1);
     }
 
     @Test
@@ -164,11 +191,8 @@ class KnowledgeIntegrationTests {
                         "admin@example.com", workspaceFor("admin@example.com"), null, null, null);
         assertThat(first.items()).hasSize(20);
         var expected =
-                published.stream()
-                        .map(t -> t.id().toString())
-                        .sorted(Comparator.reverseOrder())
-                        .toList();
-        assertThat(first.items().stream().map(t -> t.id().toString()))
+                published.stream().map(TicketView::id).sorted(Comparator.reverseOrder()).toList();
+        assertThat(first.items().stream().map(t -> t.id()))
                 .containsExactlyElementsOf(expected.subList(0, 20));
         var newest =
                 knowledge.create(
@@ -185,7 +209,7 @@ class KnowledgeIntegrationTests {
                         first.nextCursor());
         assertThat(next.items()).hasSize(5);
         assertThat(next.nextCursor()).isNull();
-        assertThat(next.items().stream().map(t -> t.id().toString()))
+        assertThat(next.items().stream().map(t -> t.id()))
                 .containsExactlyElementsOf(expected.subList(20, 25));
         assertThat(
                         knowledge
@@ -407,7 +431,7 @@ class KnowledgeIntegrationTests {
                         + " WHERE ID=?",
                 ticket.id());
         verifyNoInteractions(ai);
-        when(ai.classify(content()))
+        when(ai.classify(eq(content()), anyMap()))
                 .thenReturn(List.of("area:backend", "type:coding", "area:backend"));
         worker.runOnce();
         var classified =
@@ -415,6 +439,73 @@ class KnowledgeIntegrationTests {
                         "member@example.com", workspaceFor("member@example.com"), ticket.id());
         assertThat(classified.classificationStatus()).isEqualTo("COMPLETE");
         assertThat(classified.attributes()).containsExactly("area:backend", "type:coding");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isEqualTo(AttributeCatalog.version(catalog.definitions()));
+    }
+
+    @Test
+    void personalCapturesAndAbstentionCompleteWithoutAffectingPublication() {
+        var content =
+                new TicketContent(
+                        "An evening with my family",
+                        null,
+                        "Knowledge",
+                        List.of(
+                                new TicketContent.DetailBlock(
+                                        "paragraph",
+                                        "We shared stories over dinner.",
+                                        null,
+                                        null)));
+        var ticket =
+                knowledge.create(
+                        "member@example.com",
+                        workspaceFor("member@example.com"),
+                        new CreateTicketRequest(UUID.randomUUID(), content));
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isNull();
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second'"
+                        + " WHERE ID=?",
+                ticket.id());
+        when(ai.classify(eq(content), anyMap()))
+                .thenReturn(List.of("type:experience", "area:family"));
+        worker.runOnce();
+        assertThat(
+                        knowledge
+                                .get(
+                                        "member@example.com",
+                                        workspaceFor("member@example.com"),
+                                        ticket.id())
+                                .attributes())
+                .containsExactly("type:experience", "area:family");
+
+        // Requeue only this fixture to exercise successful no-match, not provider failure.
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET CLASSIFICATION_STATUS='PENDING',"
+                        + " NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE ID=?",
+                ticket.id());
+        when(ai.classify(eq(content), anyMap())).thenReturn(List.of());
+        worker.runOnce();
+        var unclassified =
+                knowledge.get(
+                        "member@example.com", workspaceFor("member@example.com"), ticket.id());
+        assertThat(unclassified.classificationStatus()).isEqualTo("COMPLETE");
+        assertThat(unclassified.attributes()).isEmpty();
+        assertThat(unclassified.content()).isEqualTo(content);
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                String.class,
+                                ticket.id()))
+                .isEqualTo(AttributeCatalog.version(catalog.definitions()));
     }
 
     @Test
@@ -427,7 +518,7 @@ class KnowledgeIntegrationTests {
                 "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1 second'"
                         + " WHERE ID=?",
                 ticket.id());
-        when(ai.classify(content())).thenReturn(List.of("invented:attribute"));
+        when(ai.classify(eq(content()), anyMap())).thenReturn(List.of("invented:attribute"));
         worker.runOnce();
         assertThat(
                         knowledge
@@ -437,7 +528,8 @@ class KnowledgeIntegrationTests {
                                         ticket.id())
                                 .classificationStatus())
                 .isEqualTo("RETRYING");
-        when(ai.classify(content())).thenThrow(new IllegalStateException("provider unavailable"));
+        when(ai.classify(eq(content()), anyMap()))
+                .thenThrow(new IllegalStateException("provider unavailable"));
         for (int i = 0; i < 2; i++) {
             jdbc.update(
                     "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
@@ -451,7 +543,100 @@ class KnowledgeIntegrationTests {
         assertThat(published.content()).isEqualTo(content());
         assertThat(published.attributes()).isEmpty();
         worker.runOnce();
-        verify(ai, times(3)).classify(content());
+        verify(ai, times(3)).classify(eq(content()), anyMap());
+    }
+
+    @Test
+    void databaseCatalogSupportsNewLabelsWithoutCodeChangesAndRetainsInactiveLabels()
+            throws Exception {
+        assertThat(catalog.definitions()).isNotEmpty();
+        jdbc.update(
+                "INSERT INTO KNOWLEDGE_ATTRIBUTE (ID, DISPLAY_LABEL, DESCRIPTION, SORT_ORDER)"
+                        + " VALUES (?, ?, ?, ?)",
+                "area:gardening",
+                "Gardening",
+                "Gardens and plants",
+                100);
+        try {
+            var ticket =
+                    knowledge.create(
+                            "member@example.com", workspaceFor("member@example.com"), request());
+            jdbc.update(
+                    "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                            + " second' WHERE ID=?",
+                    ticket.id());
+            var snapshot = catalog.definitions();
+            when(ai.classify(eq(content()), anyMap()))
+                    .thenAnswer(
+                            invocation -> {
+                                assertThat(invocation.<java.util.Map<String, String>>getArgument(1))
+                                        .containsEntry("area:gardening", "Gardens and plants");
+                                // The in-flight result must retain the version of its actual prompt
+                                // snapshot.
+                                jdbc.update(
+                                        "UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=FALSE,"
+                                                + " DISPLAY_LABEL='Garden projects' WHERE"
+                                                + " ID='area:gardening'");
+                                return List.of("area:gardening");
+                            });
+            worker.runOnce();
+            assertThat(
+                            knowledge
+                                    .get(
+                                            "member@example.com",
+                                            workspaceFor("member@example.com"),
+                                            ticket.id())
+                                    .attributes())
+                    .containsExactly("area:gardening");
+            assertThat(
+                            jdbc.queryForObject(
+                                    "SELECT CLASSIFICATION_VERSION FROM KNOWLEDGE_TICKET WHERE"
+                                            + " ID=?",
+                                    String.class,
+                                    ticket.id()))
+                    .isEqualTo(AttributeCatalog.version(snapshot));
+            assertThat(catalog.definitions()).doesNotContainKey("area:gardening");
+            mvc.perform(
+                            get("/api/knowledge/tickets/attributes")
+                                    .with(user("member@example.com"))
+                                    .header("X-Workspace-Id", workspaceFor("member@example.com")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data['area:gardening']").value("Garden projects"));
+            mvc.perform(get("/api/knowledge/tickets/attributes"))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(
+                            get("/api/knowledge/tickets/attributes")
+                                    .with(user("outsider@example.com"))
+                                    .header("X-Workspace-Id", workspaceFor("member@example.com")))
+                    .andExpect(status().isForbidden());
+        } finally {
+            jdbc.update("DELETE FROM KNOWLEDGE_ATTRIBUTE WHERE ID='area:gardening'");
+        }
+    }
+
+    @Test
+    void emptyActiveCatalogCompletesWithoutCallingTheProvider() {
+        var activeIds = catalog.definitions().keySet();
+        jdbc.update("UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=FALSE");
+        try {
+            var ticket =
+                    knowledge.create(
+                            "member@example.com", workspaceFor("member@example.com"), request());
+            jdbc.update(
+                    "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                            + " second' WHERE ID=?",
+                    ticket.id());
+            worker.runOnce();
+            var result =
+                    knowledge.get(
+                            "member@example.com", workspaceFor("member@example.com"), ticket.id());
+            assertThat(result.classificationStatus()).isEqualTo("COMPLETE");
+            assertThat(result.attributes()).isEmpty();
+            verifyNoInteractions(ai);
+        } finally {
+            activeIds.forEach(
+                    id -> jdbc.update("UPDATE KNOWLEDGE_ATTRIBUTE SET ACTIVE=TRUE WHERE ID=?", id));
+        }
     }
 
     @Test
@@ -470,7 +655,7 @@ class KnowledgeIntegrationTests {
         jdbc.update(
                 "UPDATE KNOWLEDGE_TICKET SET LEASE_UNTIL=CURRENT_TIMESTAMP-INTERVAL '1 second'");
         var newWork = transactions.claim();
-        transactions.complete(oldWork, List.of("area:backend"));
+        transactions.complete(oldWork, List.of("area:backend"), catalog.definitions());
         assertThat(
                         knowledge
                                 .get(
@@ -479,7 +664,7 @@ class KnowledgeIntegrationTests {
                                         ticket.id())
                                 .classificationStatus())
                 .isEqualTo("PROCESSING");
-        transactions.complete(newWork, List.of());
+        transactions.complete(newWork, List.of(), catalog.definitions());
         assertThat(
                         knowledge
                                 .get(
@@ -500,7 +685,8 @@ class KnowledgeIntegrationTests {
 
     @Test
     void refinementRephrasesOnlyExistingSelectedTextAndNeverMutatesPublication() {
-        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD)).thenReturn("Safe retries");
+        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD))
+                .thenReturn("Safe retries");
         var result =
                 knowledge.refine(
                         "member@example.com",
@@ -521,7 +707,8 @@ class KnowledgeIntegrationTests {
                 .isInstanceOfSatisfying(
                         KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(400));
         verify(ai, never()).refine(eq(""), anyString(), any(RefinementMode.class));
-        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD)).thenThrow(new IllegalStateException("offline"));
+        when(ai.refine(content().title(), "title", RefinementMode.PROOFREAD))
+                .thenThrow(new IllegalStateException("offline"));
         assertThatThrownBy(
                         () ->
                                 knowledge.refine(
@@ -545,8 +732,11 @@ class KnowledgeIntegrationTests {
     void selectedModeReachesProvider() {
         when(ai.refine(content().title(), "title", RefinementMode.REWRITE))
                 .thenReturn("Make every retry safe with a stable key");
-        var result = knowledge.refine("member@example.com", workspaceFor("member@example.com"),
-                new RefinementRequest("title", content(), RefinementMode.REWRITE));
+        var result =
+                knowledge.refine(
+                        "member@example.com",
+                        workspaceFor("member@example.com"),
+                        new RefinementRequest("title", content(), RefinementMode.REWRITE));
         assertThat(result.text()).isEqualTo("Make every retry safe with a stable key");
         verify(ai).refine(content().title(), "title", RefinementMode.REWRITE);
     }
@@ -593,36 +783,57 @@ class KnowledgeIntegrationTests {
     void refinementModeBindsAtHttpBoundaryAndDefaultsWhenOmitted() throws Exception {
         for (var mode : RefinementMode.values()) {
             when(ai.refine(content().title(), "title", mode)).thenReturn("Safe retries");
-            mvc.perform(post("/api/knowledge/tickets/refine")
-                            .with(user("member@example.com").roles("MEMBER"))
-                            .header("X-Workspace-Id", workspaceFor("member@example.com"))
-                            .with(csrf())
-                            .contentType("application/json")
-                            .content(json.writeValueAsString(Map.of(
-                                    "field", "title", "content", content(),
-                                    "mode", mode.name().toLowerCase(java.util.Locale.ROOT)))))
+            mvc.perform(
+                            post("/api/knowledge/tickets/refine")
+                                    .with(user("member@example.com").roles("MEMBER"))
+                                    .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                                    .with(csrf())
+                                    .contentType("application/json")
+                                    .content(
+                                            json.writeValueAsString(
+                                                    Map.of(
+                                                            "field",
+                                                            "title",
+                                                            "content",
+                                                            content(),
+                                                            "mode",
+                                                            mode.name()
+                                                                    .toLowerCase(
+                                                                            java.util.Locale
+                                                                                    .ROOT)))))
                     .andExpect(status().isOk());
             verify(ai).refine(content().title(), "title", mode);
         }
         clearInvocations(ai);
-        mvc.perform(post("/api/knowledge/tickets/refine")
-                        .with(user("member@example.com").roles("MEMBER"))
-                        .header("X-Workspace-Id", workspaceFor("member@example.com"))
-                        .with(csrf())
-                        .contentType("application/json")
-                        .content(json.writeValueAsString(Map.of(
-                                "field", "title", "content", content(), "mode", "invent"))))
+        mvc.perform(
+                        post("/api/knowledge/tickets/refine")
+                                .with(user("member@example.com").roles("MEMBER"))
+                                .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                                .with(csrf())
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                Map.of(
+                                                        "field", "title", "content", content(),
+                                                        "mode", "invent"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
-                .andExpect(result -> assertThat(result.getResolvedException())
-                        .isInstanceOf(org.springframework.http.converter.HttpMessageNotReadableException.class));
+                .andExpect(
+                        result ->
+                                assertThat(result.getResolvedException())
+                                        .isInstanceOf(
+                                                org.springframework.http.converter
+                                                        .HttpMessageNotReadableException.class));
         verifyNoInteractions(ai);
-        mvc.perform(post("/api/knowledge/tickets/refine")
-                        .with(user("member@example.com").roles("MEMBER"))
-                        .header("X-Workspace-Id", workspaceFor("member@example.com"))
-                        .with(csrf())
-                        .contentType("application/json")
-                        .content(json.writeValueAsString(Map.of("field", "title", "content", content()))))
+        mvc.perform(
+                        post("/api/knowledge/tickets/refine")
+                                .with(user("member@example.com").roles("MEMBER"))
+                                .header("X-Workspace-Id", workspaceFor("member@example.com"))
+                                .with(csrf())
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                Map.of("field", "title", "content", content()))))
                 .andExpect(status().isOk());
         verify(ai).refine(content().title(), "title", RefinementMode.PROOFREAD);
         assertThat(new RefinementRequest("title", content(), null).mode())
@@ -631,7 +842,8 @@ class KnowledgeIntegrationTests {
 
     @Test
     void refinementTransportReturnsOnlySelectedFieldAndRejectsDetails() throws Exception {
-        when(ai.refine(content().capture(), "capture", RefinementMode.PROOFREAD)).thenReturn("Reuse a stable key.");
+        when(ai.refine(content().capture(), "capture", RefinementMode.PROOFREAD))
+                .thenReturn("Reuse a stable key.");
         mvc.perform(
                         post("/api/knowledge/tickets/refine")
                                 .with(user("member@example.com").roles("MEMBER"))
@@ -676,7 +888,7 @@ class KnowledgeIntegrationTests {
                                 .contentType("application/json")
                                 .content(json.writeValueAsString(request())))
                 .andExpect(status().isForbidden());
-        mvc.perform(get("/api/knowledge/tickets/" + UUID.randomUUID()))
+        mvc.perform(get("/api/knowledge/tickets/" + Long.MAX_VALUE))
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
@@ -708,8 +920,8 @@ class KnowledgeIntegrationTests {
                 .andExpect(status().isForbidden());
     }
 
-    UUID workspaceFor(String email) {
+    Long workspaceFor(String email) {
         return jdbc.queryForObject(
-                "SELECT DEFAULT_WORKSPACE_ID FROM ACCOUNT WHERE EMAIL = ?", UUID.class, email);
+                "SELECT DEFAULT_WORKSPACE_ID FROM ACCOUNT WHERE EMAIL = ?", Long.class, email);
     }
 }

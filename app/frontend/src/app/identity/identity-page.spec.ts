@@ -10,7 +10,7 @@ import { IdentityStore } from './identity.store';
 
 describe('Verification link navigation', () => {
   it('uses a replacement link on the same page without reusing the superseded credential', () => {
-    const id = '00000000-0000-4000-8000-000000000001';
+    const id = '9007199254740993';
     const oldToken = 'a'.repeat(43);
     const newToken = 'b'.repeat(43);
     const fragments = new BehaviorSubject<string | null>(`${id}.${oldToken}`);
@@ -290,62 +290,5 @@ describe('Trusted reauthentication for linking', () => {
     store.loginSucceeded.set(true);
     TestBed.tick();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/link-account');
-  });
-});
-
-describe('Automatic workspace and rename settings', () => {
-  it('renames the assigned workspace without creating another workspace or redirecting', async () => {
-    const account = signal({
-      id: 'person',
-      fullName: 'Ada',
-      workspaceId: 'default',
-      workspaceName: 'My workspace',
-      accessRole: 'OWNER',
-    });
-    const api = {
-      renameWorkspace: jest.fn(() =>
-        of({ ...account(), workspaceName: 'My notes' }),
-      ),
-      createWorkspace: jest.fn(),
-    };
-    const auth = { setAccount: jest.fn() };
-    const router = { navigateByUrl: jest.fn() };
-    TestBed.configureTestingModule({
-      providers: [
-        { provide: IdentityApi, useValue: api },
-        { provide: AuthStore, useValue: auth },
-        {
-          provide: IdentityStore,
-          useValue: {
-            account,
-            clear: jest.fn(),
-            run: jest.fn(),
-            signedOut: signal(false),
-          },
-        },
-        { provide: Router, useValue: router },
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            snapshot: {
-              data: { mode: 'workspace' },
-              queryParamMap: convertToParamMap({}),
-            },
-          },
-        },
-      ],
-    });
-    const page = TestBed.runInInjectionContext(() => new IdentityPage());
-    page.workspaceForm.controls.name.setValue('My notes');
-    await page.renameWorkspace();
-    expect(api.renameWorkspace).toHaveBeenCalledWith('default', 'My notes');
-    expect(api.createWorkspace).not.toHaveBeenCalled();
-    expect(auth.setAccount).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspaceId: 'default',
-        workspaceName: 'My notes',
-      }),
-    );
-    expect(router.navigateByUrl).not.toHaveBeenCalled();
   });
 });

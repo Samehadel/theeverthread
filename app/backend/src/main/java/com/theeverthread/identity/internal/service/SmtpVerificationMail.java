@@ -10,8 +10,6 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
-import java.util.UUID;
-
 @Component
 public class SmtpVerificationMail implements VerificationMail {
     private final JavaMailSender mail;
@@ -30,7 +28,7 @@ public class SmtpVerificationMail implements VerificationMail {
         this.host = host;
     }
 
-    public String send(String email, UUID id, String token) {
+    public String send(String email, Long id, String token) {
         if (from.endsWith("@theeverthread.local")
                 && !java.util.Set.of("127.0.0.1", "localhost", "::1", "mailpit").contains(host)) {
             throw new EmailDeliveryException("SMTP_FROM_NOT_CONFIGURED");

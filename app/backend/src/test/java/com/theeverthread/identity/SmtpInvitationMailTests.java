@@ -29,7 +29,7 @@ class SmtpInvitationMailTests {
                         "https://theeverthread.example",
                         "no-reply@theeverthread.example",
                         "smtp.example");
-        var id = UUID.randomUUID();
+        var id = 123L;
         var expiry = Instant.parse("2026-10-14T08:00:00Z");
         var claim =
                 new InvitationTransactions.Claim(
