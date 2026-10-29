@@ -11,6 +11,8 @@
           class="button secondary"
           [disabled]="store.busy()"
           (click)="store.run({ kind: 'logout' })"
+          [class.is-loading]="store.busy()"
+          [attr.aria-busy]="store.busy()"
         >
           {{ t("identity.logout") }}
         </button>
@@ -240,7 +242,9 @@
           <div class="workspace-empty">
             <h1 id="workspace-title">{{ t("identity.title.workspace") }}</h1>
             @if (store.busy()) {
-              <p role="status">{{ t("identity.home.loading") }}</p>
+              <p class="loading-state" role="status">
+                {{ t("identity.home.loading") }}
+              </p>
             } @else {
               <p>{{ t("identity.loginRequired") }}</p>
               <div class="actions">
@@ -290,7 +294,9 @@
             </div>
           }
           @if (store.busy() && mode !== "verify") {
-            <p role="status" class="form-hint">{{ t("identity.working") }}</p>
+            <p role="status" class="loading-state form-hint">
+              {{ t("identity.working") }}
+            </p>
           }
           @if (isRegistration && !store.pending()) {
             <p class="form-intro">
@@ -412,12 +418,17 @@
                   </div>
                 </div>
               </fieldset>
-              @if (submitted() && registration.invalid) {
+              @if (submitted() && registration.invalid && !store.busy()) {
                 <p role="alert" class="field-error">
                   {{ t("identity.correctFields") }}
                 </p>
               }
-              <button class="button register-submit" [disabled]="store.busy()">
+              <button
+                class="button register-submit"
+                [disabled]="store.busy()"
+                [class.is-loading]="store.busy()"
+                [attr.aria-busy]="store.busy()"
+              >
                 {{
                   t(
                     mode === "signup"
@@ -464,11 +475,13 @@
                 class="button mb-6"
                 [disabled]="store.busy()"
                 (click)="verify()"
+                [class.is-loading]="store.busy()"
+                [attr.aria-busy]="store.busy()"
               >
                 {{ t("identity.retry") }}
               </button>
             } @else {
-              <p role="status">{{ t("identity.verifying") }}</p>
+              <p role="status" [class.loading-state]="store.busy()">{{ t("identity.verifying") }}</p>
             }
           }
           @if (mode === "login") {
@@ -526,7 +539,12 @@
                   }
                 </div>
               </fieldset>
-              <button class="button register-submit" [disabled]="store.busy()">
+              <button
+                class="button register-submit"
+                [disabled]="store.busy()"
+                [class.is-loading]="store.busy()"
+                [attr.aria-busy]="store.busy()"
+              >
                 {{ t("identity.login") }}<span aria-hidden="true">→</span>
               </button>
             </form>
@@ -598,6 +616,8 @@
                   [disabled]="
                     store.busy() || remaining() > 0 || deliveryInProgress()
                   "
+                  [class.is-loading]="store.busy()"
+                  [attr.aria-busy]="store.busy()"
                 >
                   {{ t("identity.resend") }}
                 </button>

@@ -5,6 +5,7 @@
         @if (provider.available) {
           <a
             class="button secondary justify-center"
+            (click)="openProvider($event)"
             [href]="'/api/auth/oauth/authorize/' + provider.id"
           >
             {{ t("individual." + provider.id) }}
@@ -25,8 +26,18 @@
       <p class="form-hint">{{ t("individual.providerUnavailable") }}</p>
     }
   } @else {
-    <p class="form-hint" role="status">
-      {{ t(providers() === null ? "individual.providerUnavailable" : "identity.working") }}
+    <p
+      class="form-hint"
+      [class.loading-state]="providers() === undefined"
+      role="status"
+    >
+      {{
+        t(
+          providers() === null
+            ? "individual.providerUnavailable"
+            : "identity.working"
+        )
+      }}
     </p>
   }
 </div>

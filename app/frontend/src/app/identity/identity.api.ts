@@ -1,5 +1,6 @@
+import { BACKGROUND_REQUEST } from '../core/loading.interceptor';
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { switchMap, map } from 'rxjs';
 export interface Registration {
   fullName: string;
@@ -60,12 +61,16 @@ export class IdentityApi {
       .get<Envelope<Account>>('/api/auth/me')
       .pipe(map((result) => result.data));
   }
-  private post<T>(url: string, body: unknown) {
+  private post<T>(url: string, body: unknown, background = false) {
+    const context = new HttpContext().set(BACKGROUND_REQUEST, background);
     return this.http
-      .get<Envelope<{ token: string; headerName: string }>>('/api/auth/csrf')
+      .get<Envelope<{ token: string; headerName: string }>>('/api/auth/csrf', {
+        context,
+      })
       .pipe(
         switchMap((csrf) =>
           this.http.post<Envelope<T>>(url, body, {
+            context,
             headers: { [csrf.data.headerName]: csrf.data.token },
           }),
         ),
@@ -89,7 +94,7 @@ export class IdentityApi {
     return this.post<Pending>('/api/registration', body);
   }
   deliveryStatus(email: string) {
-    return this.post<Pending>('/api/registration/status', { email });
+    return this.post<Pending>('/api/registration/status', { email }, true);
   }
   resend(email: string) {
     return this.post<Pending>('/api/registration/resend', { email });

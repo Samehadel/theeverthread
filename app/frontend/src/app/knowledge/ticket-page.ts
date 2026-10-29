@@ -42,7 +42,7 @@ export class TicketPage {
           this.store.ticket()?.classificationStatus ?? '',
         )
       )
-        this.store.load(this.id);
+        this.store.load({ id: this.id, background: true });
     }, 5000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }

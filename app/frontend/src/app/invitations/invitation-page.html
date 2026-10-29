@@ -14,7 +14,7 @@
     class="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (loading()) {
-      <p role="status">{{ t("invitations.loading") }}</p>
+      <p class="loading-state" role="status">{{ t("invitations.loading") }}</p>
     } @else if (loadFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button type="button" class="button mt-6" (click)="load()">
@@ -97,6 +97,8 @@
               />
               <button
                 class="button"
+                [class.is-loading]="row.state === 'sending'"
+                [attr.aria-busy]="row.state === 'sending'"
                 type="submit"
                 [disabled]="
                   row.state === 'sent' ||

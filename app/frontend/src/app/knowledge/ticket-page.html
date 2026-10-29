@@ -24,7 +24,14 @@
           store.ticket() ? t("knowledge.detailRefreshError") : t(store.error())
         }}
       </p>
-      <button type="button" class="button secondary" (click)="store.load(id)">
+      <button
+        type="button"
+        class="button secondary"
+        (click)="store.load(id)"
+        [disabled]="store.loading()"
+        [class.is-loading]="store.loading()"
+        [attr.aria-busy]="store.loading()"
+      >
         {{ t("identity.retry") }}
       </button>
     }
@@ -61,7 +68,7 @@
         </footer>
       </article>
     } @else if (store.loading()) {
-      <p role="status">{{ t("knowledge.loading") }}</p>
+      <p class="loading-state" role="status">{{ t("knowledge.loading") }}</p>
     }
   </main>
 </ng-container>

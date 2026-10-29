@@ -1,7 +1,12 @@
+import { BACKGROUND_REQUEST } from '../core/loading.interceptor';
 import { inject, Injectable } from '@angular/core';
 import { AuthStore } from '../core/auth.store';
 import { WorkspaceContext } from '../core/workspace-context';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpContext,
+  HttpErrorResponse,
+} from '@angular/common/http';
 import { map, switchMap, throwError } from 'rxjs';
 import {
   Ticket,
@@ -31,9 +36,11 @@ export class KnowledgeApi {
       .get<{ data: TicketPageResult }>('/api/knowledge/tickets', { params })
       .pipe(map((response) => response.data));
   }
-  get(id: string) {
+  get(id: string, background = false) {
     return this.http
-      .get<{ data: Ticket }>(`/api/knowledge/tickets/${id}`)
+      .get<{ data: Ticket }>(`/api/knowledge/tickets/${id}`, {
+        context: new HttpContext().set(BACKGROUND_REQUEST, background),
+      })
       .pipe(map((r) => r.data));
   }
   create(submissionId: string, content: TicketContent, workspaceId: string) {

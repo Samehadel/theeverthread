@@ -21,7 +21,7 @@
       @if (invalidLink()) {
         <p role="alert">{{ t("acceptance.invalid") }}</p>
       } @else if (store.loading()) {
-        <p role="status">{{ t("acceptance.loading") }}</p>
+        <p class="loading-state" role="status">{{ t("acceptance.loading") }}</p>
       } @else if (store.account(); as account) {
         <div role="status">
           <h2 class="text-2xl font-semibold">{{ t("acceptance.success") }}</h2>
@@ -76,6 +76,8 @@
                   class="button"
                   [disabled]="store.submitting()"
                   (click)="acceptExisting()"
+                  [class.is-loading]="store.submitting()"
+                  [attr.aria-busy]="store.submitting()"
                 >
                   Accept invitation
                 </button>
@@ -155,6 +157,8 @@
                     class="button mt-2"
                     type="submit"
                     [disabled]="store.submitting()"
+                    [class.is-loading]="store.submitting()"
+                    [attr.aria-busy]="store.submitting()"
                   >
                     {{
                       existingAccount()

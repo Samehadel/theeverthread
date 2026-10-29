@@ -478,5 +478,8 @@
     "saveFailed": "Unable to save the workspace. Check your connection and access, then try again.",
     "empty": "You have no workspaces yet. Create one above.",
     "loadFailed": "Unable to load your workspaces. Please try again."
+  },
+  "common": {
+    "loading": "Loading…"
   }
 }

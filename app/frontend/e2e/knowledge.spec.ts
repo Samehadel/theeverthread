@@ -315,7 +315,7 @@ for (const viewport of [
         .click();
       await expect(page).toHaveURL(/knowledge\/tickets\/ticket-1/);
       expect(ids[0]).toBe(ids[1]);
-      await expect(page.getByRole('status')).toContainText([
+      await expect(page.getByRole('main').getByRole('status')).toContainText([
         'Ticket published',
         'Classification complete',
       ]);
