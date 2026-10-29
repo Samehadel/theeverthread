@@ -5,7 +5,7 @@
     class="workspace-management mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p class="loading-state" role="status">
+      <p appLoadingStatus>
         {{ t("identity.home.loading") }}
       </p>
     } @else if (!auth.account()) {
@@ -64,10 +64,10 @@
               "
             />
             <button
+              appLoadingButton
               class="button"
               [disabled]="busy()"
-              [class.is-loading]="busy() && errorForm() === 'create'"
-              [attr.aria-busy]="busy() && errorForm() === 'create'"
+              [loading]="busy() && errorForm() === 'create'"
             >
               {{ t("workspaceSettings.createAction") }}
             </button>
@@ -141,10 +141,10 @@
                         "
                       />
                       <button
+                        appLoadingButton
                         class="button secondary"
                         [disabled]="busy()"
-                        [class.is-loading]="busy() && errorForm() === 'rename'"
-                        [attr.aria-busy]="busy() && errorForm() === 'rename'"
+                        [loading]="busy() && errorForm() === 'rename'"
                       >
                         {{ t("workspace.renameAction") }}
                       </button>

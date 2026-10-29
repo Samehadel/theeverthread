@@ -14,7 +14,7 @@
     class="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p class="loading-state" role="status">{{ t("invitations.loading") }}</p>
+      <p appLoadingStatus>{{ t("invitations.loading") }}</p>
     } @else if (authFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button class="button mt-4" (click)="load()">
@@ -99,7 +99,7 @@
               </p>
             }
             @if (store.invitationsLoading()) {
-              <p class="loading-state" role="status">{{ t("team.loading") }}</p>
+              <p appLoadingStatus>{{ t("team.loading") }}</p>
             } @else if (store.invitationsError()) {
               <p role="alert">
                 {{
@@ -163,6 +163,7 @@
                           @if (eligible(invitation)) {
                             <div class="mt-3">
                               <button
+                                appLoadingButton
                                 type="button"
                                 class="button secondary text-xs"
                                 [attr.aria-label]="
@@ -173,11 +174,7 @@
                                   invitation.resending ||
                                   cooldown(invitation) > 0
                                 "
-                                [class.is-loading]="
-                                  store.busyId() === invitation.id ||
-                                  invitation.resending
-                                "
-                                [attr.aria-busy]="
+                                [loading]="
                                   store.busyId() === invitation.id ||
                                   invitation.resending
                                 "
@@ -251,7 +248,7 @@
             }
           } @else {
             @if (store.membersLoading()) {
-              <p class="loading-state" role="status">{{ t("team.loading") }}</p>
+              <p appLoadingStatus>{{ t("team.loading") }}</p>
             } @else if (store.membersError()) {
               <p role="alert">
                 {{

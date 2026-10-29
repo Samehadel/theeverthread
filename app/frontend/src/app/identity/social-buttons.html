@@ -26,11 +26,7 @@
       <p class="form-hint">{{ t("individual.providerUnavailable") }}</p>
     }
   } @else {
-    <p
-      class="form-hint"
-      [class.loading-state]="providers() === undefined"
-      role="status"
-    >
+    <p appLoadingStatus class="form-hint" [active]="providers() === undefined">
       {{
         t(
           providers() === null

@@ -210,11 +210,10 @@
                   )
                 }}</small
                 ><button
+                  appLoadingButton
                   class="button secondary"
-                  [disabled]="session.busy()"
                   (click)="session.run({ kind: 'logout' })"
-                  [class.is-loading]="session.busy()"
-                  [attr.aria-busy]="session.busy()"
+                  [loading]="session.busy()"
                 >
                   {{ t("identity.logout") }}
                 </button>

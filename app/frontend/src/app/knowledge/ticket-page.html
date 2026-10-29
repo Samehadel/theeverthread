@@ -25,12 +25,11 @@
         }}
       </p>
       <button
+        appLoadingButton
         type="button"
         class="button secondary"
         (click)="store.load(id)"
-        [disabled]="store.loading()"
-        [class.is-loading]="store.loading()"
-        [attr.aria-busy]="store.loading()"
+        [loading]="store.loading()"
       >
         {{ t("identity.retry") }}
       </button>
@@ -68,7 +67,7 @@
         </footer>
       </article>
     } @else if (store.loading()) {
-      <p class="loading-state" role="status">{{ t("knowledge.loading") }}</p>
+      <p appLoadingStatus>{{ t("knowledge.loading") }}</p>
     }
   </main>
 </ng-container>

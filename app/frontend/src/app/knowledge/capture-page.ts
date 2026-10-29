@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import { AuthStore } from '../core/auth.store';
 import {
   ChangeDetectionStrategy,
@@ -31,6 +33,8 @@ import { DetailsEditor } from './details-editor';
   providers: [KnowledgeStore],
   selector: 'app-capture-page',
   imports: [
+    LoadingButton,
+    LoadingStatus,
     NgTemplateOutlet,
     FormsModule,
     RouterLink,

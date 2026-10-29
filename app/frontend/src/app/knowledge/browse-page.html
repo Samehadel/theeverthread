@@ -23,14 +23,13 @@
         <p class="text-[var(--muted)]">{{ t("knowledge.browseIntro") }}</p>
       </div>
       <button
+        appLoadingButton
         class="button secondary icon-button"
         [attr.aria-label]="t('knowledge.refresh')"
         [title]="t('knowledge.refresh')"
         type="button"
         (click)="refresh()"
-        [disabled]="store.loading()"
-        [class.is-loading]="store.loading()"
-        [attr.aria-busy]="store.loading()"
+        [loading]="store.loading()"
       >
         <svg
           class="refresh-icon"
@@ -69,12 +68,11 @@
       <div class="form-alert" role="alert">
         <p>{{ t("knowledge.browseError") }}</p>
         <button
+          appLoadingButton
           class="button secondary"
           type="button"
           (click)="store.retry()"
-          [disabled]="store.loading()"
-          [class.is-loading]="store.loading()"
-          [attr.aria-busy]="store.loading()"
+          [loading]="store.loading()"
         >
           {{ t("identity.retry") }}
         </button>
@@ -133,7 +131,7 @@
       }
     </ul>
     @if (store.loading()) {
-      <p class="loading-state" role="status">
+      <p appLoadingStatus>
         {{ t("knowledge.browseLoading") }}
       </p>
       @if (!store.items().length) {
@@ -174,12 +172,11 @@
     @if (store.nextCursor()) {
       <div class="knowledge-pagination">
         <button
+          appLoadingButton
           class="button secondary"
           type="button"
-          [disabled]="store.loading()"
           (click)="store.more()"
-          [class.is-loading]="store.loading()"
-          [attr.aria-busy]="store.loading()"
+          [loading]="store.loading()"
         >
           {{ t("knowledge.loadMore") }}
         </button>

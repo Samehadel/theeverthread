@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import { AttributeCatalogStore } from './attribute-catalog.store';
 import {
   ChangeDetectionStrategy,
@@ -16,7 +18,13 @@ import { attributeLabels, fullDate } from './knowledge.models';
 @Component({
   providers: [KnowledgeStore],
   selector: 'app-ticket-page',
-  imports: [RouterLink, TranslocoDirective, DetailsView],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    RouterLink,
+    TranslocoDirective,
+    DetailsView,
+  ],
   templateUrl: './ticket-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

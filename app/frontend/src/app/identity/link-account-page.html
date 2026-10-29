@@ -15,16 +15,15 @@
       t("workspace.knowledge")
     }}</a>
   } @else if (!store.loaded()) {
-    <p class="loading-state" role="status">{{ t("identity.working") }}</p>
+    <p appLoadingStatus>{{ t("identity.working") }}</p>
   } @else if (store.provider()) {
     <p>{{ t("individual.linkIntro", { provider: store.provider() }) }}</p>
     <div class="flex flex-wrap gap-3 mt-6">
       <button
+        appLoadingButton
         class="button"
-        [disabled]="store.busy()"
         (click)="store.confirm()"
-        [class.is-loading]="store.busy()"
-        [attr.aria-busy]="store.busy()"
+        [loading]="store.busy()"
       >
         {{ t(store.busy() ? "identity.working" : "individual.confirmLink") }}
       </button>

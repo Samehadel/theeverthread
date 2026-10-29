@@ -137,13 +137,12 @@
               >{{ t("knowledge.autoAttributes") }}</span
             >
           </p>
-          <button
+          <button appLoadingButton
             class="button"
             [disabled]="
               workspaceChanged() || !valid() || store.busy() || store.refining()
             "
-            [class.is-loading]="store.busy()"
-            [attr.aria-busy]="store.busy()"
+            [loading]="store.busy()"
           >
             {{ t(store.busy() ? "knowledge.publishing" : "knowledge.publish") }}
           </button>
@@ -173,7 +172,7 @@
           [attr.aria-label]="t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture')"
         >
           @for (mode of refinementModes; track mode) {
-          <button
+          <button appLoadingButton
             type="button"
             class="refinement-option"
             [id]="'refine-' + field + '-' + mode"
@@ -183,8 +182,7 @@
             [attr.aria-describedby]="'refinement-help-' + mode + ' refinement-required'"
             [attr.title]="t('knowledge.modeHints.' + mode)"
             (click)="refine(field, mode)"
-            [class.is-loading]="store.refining() && refinementField() === field && requestedMode() === mode"
-            [attr.aria-busy]="store.refining() && refinementField() === field && requestedMode() === mode"
+            [loading]="store.refining() && refinementField() === field && requestedMode() === mode"
           >
             {{ t('knowledge.modes.' + mode) }}
           </button>
@@ -221,7 +219,7 @@
     @if (refinementField() === field) {
     <div aria-live="polite" [attr.aria-busy]="store.refining()">
       @if (store.refining()) {
-      <p role="status" class="loading-state knowledge-hint">
+      <p appLoadingStatus class="knowledge-hint">
         {{ t('knowledge.refining') }} {{ t('knowledge.fields.' + field) }} · {{
         t('knowledge.modes.' + requestedMode()) }}
       </p>

@@ -1,3 +1,4 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +14,7 @@ import { IdentityApi } from './identity.api';
 
 @Component({
   selector: 'app-social-buttons',
-  imports: [TranslocoDirective],
+  imports: [LoadingStatus, TranslocoDirective],
   templateUrl: './social-buttons.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

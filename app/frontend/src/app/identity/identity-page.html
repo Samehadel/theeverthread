@@ -8,11 +8,10 @@
       @if (store.account(); as account) {
         <span class="nav-workspace">{{ account.workspaceName }}</span>
         <button
+          appLoadingButton
           class="button secondary"
-          [disabled]="store.busy()"
           (click)="store.run({ kind: 'logout' })"
-          [class.is-loading]="store.busy()"
-          [attr.aria-busy]="store.busy()"
+          [loading]="store.busy()"
         >
           {{ t("identity.logout") }}
         </button>
@@ -242,7 +241,7 @@
           <div class="workspace-empty">
             <h1 id="workspace-title">{{ t("identity.title.workspace") }}</h1>
             @if (store.busy()) {
-              <p class="loading-state" role="status">
+              <p appLoadingStatus>
                 {{ t("identity.home.loading") }}
               </p>
             } @else {
@@ -294,7 +293,7 @@
             </div>
           }
           @if (store.busy() && mode !== "verify") {
-            <p role="status" class="loading-state form-hint">
+            <p appLoadingStatus class="form-hint">
               {{ t("identity.working") }}
             </p>
           }
@@ -424,10 +423,9 @@
                 </p>
               }
               <button
+                appLoadingButton
                 class="button register-submit"
-                [disabled]="store.busy()"
-                [class.is-loading]="store.busy()"
-                [attr.aria-busy]="store.busy()"
+                [loading]="store.busy()"
               >
                 {{
                   t(
@@ -472,16 +470,17 @@
               </p>
             } @else if (store.errorCode()) {
               <button
+                appLoadingButton
                 class="button mb-6"
-                [disabled]="store.busy()"
                 (click)="verify()"
-                [class.is-loading]="store.busy()"
-                [attr.aria-busy]="store.busy()"
+                [loading]="store.busy()"
               >
                 {{ t("identity.retry") }}
               </button>
             } @else {
-              <p role="status" [class.loading-state]="store.busy()">{{ t("identity.verifying") }}</p>
+              <p appLoadingStatus [active]="store.busy()">
+                {{ t("identity.verifying") }}
+              </p>
             }
           }
           @if (mode === "login") {
@@ -540,10 +539,9 @@
                 </div>
               </fieldset>
               <button
+                appLoadingButton
                 class="button register-submit"
-                [disabled]="store.busy()"
-                [class.is-loading]="store.busy()"
-                [attr.aria-busy]="store.busy()"
+                [loading]="store.busy()"
               >
                 {{ t("identity.login") }}<span aria-hidden="true">→</span>
               </button>
@@ -612,12 +610,12 @@
                   }
                 }
                 <button
+                  appLoadingButton
                   class="button secondary"
                   [disabled]="
                     store.busy() || remaining() > 0 || deliveryInProgress()
                   "
-                  [class.is-loading]="store.busy()"
-                  [attr.aria-busy]="store.busy()"
+                  [loading]="store.busy()"
                 >
                   {{ t("identity.resend") }}
                 </button>

@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import { IdentityApi } from '../identity/identity.api';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -17,7 +19,13 @@ import { AcceptanceStore } from './acceptance.store';
 
 @Component({
   selector: 'app-acceptance-page',
-  imports: [ReactiveFormsModule, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    ReactiveFormsModule,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './acceptance-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -58,10 +66,9 @@ export class AcceptancePage {
   constructor() {
     this.route.fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => {
       if (fragment === null && this.link) return;
-      const match =
-        /^([1-9][0-9]{0,18})\.([A-Za-z0-9_-]{43})$/i.exec(
-          fragment ?? '',
-        );
+      const match = /^([1-9][0-9]{0,18})\.([A-Za-z0-9_-]{43})$/i.exec(
+        fragment ?? '',
+      );
       this.link = match ? { id: match[1], token: match[2] } : null;
       this.invalidLink.set(!this.link);
       this.form.reset();
