@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import { AttributeCatalogStore } from './attribute-catalog.store';
 import { AuthStore } from '../core/auth.store';
 import {
@@ -16,7 +18,14 @@ import { attributeLabels, fullDate, templates } from './knowledge.models';
 
 @Component({
   selector: 'app-browse-page',
-  imports: [DatePipe, FormsModule, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    DatePipe,
+    FormsModule,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './browse-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

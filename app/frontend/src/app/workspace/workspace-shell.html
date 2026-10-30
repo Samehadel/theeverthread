@@ -210,9 +210,10 @@
                   )
                 }}</small
                 ><button
+                  appLoadingButton
                   class="button secondary"
-                  [disabled]="session.busy()"
                   (click)="session.run({ kind: 'logout' })"
+                  [loading]="session.busy()"
                 >
                   {{ t("identity.logout") }}
                 </button>

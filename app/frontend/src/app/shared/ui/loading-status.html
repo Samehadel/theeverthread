@@ -1,0 +1,54 @@
+<span class="loading-status-caption">
+  @if (active() && appearance() !== "inline") {
+    <span class="loading-emblem" aria-hidden="true">
+      @if (appearance() === "ai") {
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
+          <path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z" />
+        </svg>
+      } @else {
+        <span class="loading-dot"></span><span class="loading-dot"></span
+        ><span class="loading-dot"></span>
+      }
+    </span>
+  }
+  <span
+    ><span class="loading-status-label"><ng-content /></span>
+    @if (hint()) {
+      <span class="loading-status-hint">{{ hint() }}</span>
+    }
+  </span>
+</span>
+@if (active() && appearance() !== "inline") {
+  <span class="loading-preview" aria-hidden="true">
+    @if (appearance() === "document") {
+      <span class="skeleton-line skeleton-kicker"></span>
+      <span class="skeleton-line skeleton-title"></span>
+      <span class="skeleton-line skeleton-meta"></span>
+    }
+    @for (
+      row of appearance() === "list"
+        ? [1, 2, 3]
+        : appearance() === "document"
+          ? [1, 2]
+          : [1];
+      track row
+    ) {
+      <span class="skeleton-group">
+        <span class="skeleton-line"></span>
+        <span class="skeleton-line skeleton-medium"></span>
+        <span class="skeleton-line skeleton-short"></span>
+      </span>
+    }
+    @if (appearance() === "document") {
+      <span class="skeleton-tags"
+        ><span class="skeleton-line"></span><span class="skeleton-line"></span
+        ><span class="skeleton-line"></span
+      ></span>
+    }
+  </span>
+}

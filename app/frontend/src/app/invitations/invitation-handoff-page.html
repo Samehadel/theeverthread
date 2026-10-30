@@ -7,7 +7,9 @@
   </header>
   <main class="mx-auto max-w-3xl px-5 py-16">
     @if (loading()) {
-      <p role="status">{{ t("invitations.loading") }}</p>
+      <p appLoadingStatus appearance="document">
+        {{ t("invitations.loading") }}
+      </p>
     } @else if (loadFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button type="button" class="button mt-6" (click)="load()">

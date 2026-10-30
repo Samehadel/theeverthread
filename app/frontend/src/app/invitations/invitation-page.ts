@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +15,13 @@ import { AuthStore } from '../core/auth.store';
 import { InvitationStore, InvitationRow } from './invitation.store';
 @Component({
   selector: 'app-invitation-page',
-  imports: [FormsModule, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    FormsModule,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './invitation-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

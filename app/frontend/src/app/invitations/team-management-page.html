@@ -14,7 +14,7 @@
     class="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p role="status">{{ t("invitations.loading") }}</p>
+      <p appLoadingStatus appearance="list">{{ t("invitations.loading") }}</p>
     } @else if (authFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button class="button mt-4" (click)="load()">
@@ -99,7 +99,7 @@
               </p>
             }
             @if (store.invitationsLoading()) {
-              <p role="status">{{ t("team.loading") }}</p>
+              <p appLoadingStatus appearance="list">{{ t("team.loading") }}</p>
             } @else if (store.invitationsError()) {
               <p role="alert">
                 {{
@@ -163,6 +163,7 @@
                           @if (eligible(invitation)) {
                             <div class="mt-3">
                               <button
+                                appLoadingButton
                                 type="button"
                                 class="button secondary text-xs"
                                 [attr.aria-label]="
@@ -172,6 +173,10 @@
                                   !!store.busyId() ||
                                   invitation.resending ||
                                   cooldown(invitation) > 0
+                                "
+                                [loading]="
+                                  store.busyId() === invitation.id ||
+                                  invitation.resending
                                 "
                                 (click)="store.resend(invitation.id)"
                               >
@@ -243,7 +248,7 @@
             }
           } @else {
             @if (store.membersLoading()) {
-              <p role="status">{{ t("team.loading") }}</p>
+              <p appLoadingStatus appearance="list">{{ t("team.loading") }}</p>
             } @else if (store.membersError()) {
               <p role="alert">
                 {{

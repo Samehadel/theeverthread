@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,7 +18,13 @@ import { TeamManagementStore } from './team-management.store';
 
 @Component({
   selector: 'app-team-management-page',
-  imports: [DatePipe, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    DatePipe,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './team-management-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

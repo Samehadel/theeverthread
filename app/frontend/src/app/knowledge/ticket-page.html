@@ -19,14 +19,36 @@
       </p>
     }
     @if (store.error()) {
-      <p role="alert" class="form-alert">
-        {{
-          store.ticket() ? t("knowledge.detailRefreshError") : t(store.error())
-        }}
-      </p>
-      <button type="button" class="button secondary" (click)="store.load(id)">
-        {{ t("identity.retry") }}
-      </button>
+      <section
+        class="knowledge-load-error"
+        [class.is-refresh-error]="!!store.ticket()"
+        role="alert"
+      >
+        <span class="load-error-symbol" aria-hidden="true">!</span>
+        <div>
+          @if (!store.ticket()) {
+            <h2>{{ t("knowledge.loadFailed") }}</h2>
+          }
+          <p>
+            {{
+              store.ticket()
+                ? t("knowledge.detailRefreshError")
+                : store.error() === "knowledge.unavailable"
+                  ? t("knowledge.loadFailedHint")
+                  : t(store.error())
+            }}
+          </p>
+          <button
+            appLoadingButton
+            type="button"
+            class="button secondary"
+            (click)="store.load(id)"
+            [loading]="store.loading()"
+          >
+            {{ t("identity.retry") }}
+          </button>
+        </div>
+      </section>
     }
     @if (store.ticket(); as ticket) {
       <article class="knowledge-card">
@@ -61,7 +83,7 @@
         </footer>
       </article>
     } @else if (store.loading()) {
-      <p role="status">{{ t("knowledge.loading") }}</p>
+      <p appLoadingStatus appearance="document">{{ t("knowledge.loading") }}</p>
     }
   </main>
 </ng-container>

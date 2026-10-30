@@ -1,3 +1,4 @@
+import { loadingInterceptor } from './core/loading.interceptor';
 import { workspaceInterceptor } from './core/workspace.interceptor';
 import {
   ApplicationConfig,
@@ -24,6 +25,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideHttpClient(
       withInterceptors([
+        loadingInterceptor,
         workspaceInterceptor,
         sessionRefreshInterceptor,
         apiTimeoutInterceptor,

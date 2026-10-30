@@ -388,7 +388,10 @@
       "linkError": "Enter link text and a valid https:// or http:// address.",
       "tooManyBlocks": "Keep your document to 200 paragraphs or sections.",
       "codingHint": "Coding needs a code section. Choose Code in the toolbar or type ```."
-    }
+    },
+    "aiLoadingHint": "Finding the right words. Your original stays unchanged.",
+    "loadFailed": "We couldn’t open this knowledge",
+    "loadFailedHint": "The connection was interrupted or the request took too long. Try opening it again."
   },
   "workspace": {
     "navigation": "Workspace navigation",
@@ -478,5 +481,8 @@
     "saveFailed": "Unable to save the workspace. Check your connection and access, then try again.",
     "empty": "You have no workspaces yet. Create one above.",
     "loadFailed": "Unable to load your workspaces. Please try again."
+  },
+  "common": {
+    "loading": "Loading…"
   }
 }

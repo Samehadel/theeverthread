@@ -77,11 +77,14 @@ export const KnowledgeStore = signalStore(
         }),
       ),
     );
-    const load = rxMethod<string>(
+    const load = rxMethod<string | { id: string; background: boolean }>(
       pipe(
-        exhaustMap((id) => {
+        exhaustMap((request) => {
+          const id = typeof request === 'string' ? request : request.id;
+          const background =
+            typeof request === 'string' ? false : request.background;
           patchState(store, { loading: true, error: '' });
-          return api.get(id).pipe(
+          return api.get(id, background).pipe(
             tap((ticket) => patchState(store, { ticket, loading: false })),
             catchError((e) => {
               patchState(store, {
