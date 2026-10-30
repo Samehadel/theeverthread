@@ -1,3 +1,4 @@
+import { LoadingButton } from '../shared/ui/loading-button';
 import { firstValueFrom } from 'rxjs';
 import { IdentityApi } from '../identity/identity.api';
 import {
@@ -28,7 +29,7 @@ import { IdentityStore } from '../identity/identity.store';
 /** Keeps workspace navigation available while feature pages own their content and permissions. */
 @Component({
   selector: 'app-workspace-shell',
-  imports: [RouterLink, RouterLinkActive, TranslocoDirective],
+  imports: [LoadingButton, RouterLink, RouterLinkActive, TranslocoDirective],
   providers: [IdentityStore],
   templateUrl: './workspace-shell.html',
   changeDetection: ChangeDetectionStrategy.OnPush,

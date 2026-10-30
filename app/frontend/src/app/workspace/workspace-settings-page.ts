@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -13,7 +15,13 @@ import { IdentityApi } from '../identity/identity.api';
 
 @Component({
   selector: 'app-workspace-settings-page',
-  imports: [ReactiveFormsModule, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    ReactiveFormsModule,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './workspace-settings-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

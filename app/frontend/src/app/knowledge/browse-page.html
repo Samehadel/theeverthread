@@ -23,12 +23,27 @@
         <p class="text-[var(--muted)]">{{ t("knowledge.browseIntro") }}</p>
       </div>
       <button
-        class="button secondary"
+        appLoadingButton
+        class="button secondary icon-button"
+        [attr.aria-label]="t('knowledge.refresh')"
+        [title]="t('knowledge.refresh')"
         type="button"
         (click)="refresh()"
-        [disabled]="store.loading()"
+        [loading]="store.loading()"
       >
-        {{ t("knowledge.refresh") }}
+        <svg
+          class="refresh-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20 7v5h-5M4 17v-5h5" />
+          <path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" />
+        </svg>
       </button>
     </div>
     <div class="knowledge-filter">
@@ -53,10 +68,11 @@
       <div class="form-alert" role="alert">
         <p>{{ t("knowledge.browseError") }}</p>
         <button
+          appLoadingButton
           class="button secondary"
           type="button"
           (click)="store.retry()"
-          [disabled]="store.loading()"
+          [loading]="store.loading()"
         >
           {{ t("identity.retry") }}
         </button>
@@ -115,14 +131,12 @@
       }
     </ul>
     @if (store.loading()) {
-      <p role="status">{{ t("knowledge.browseLoading") }}</p>
-      @if (!store.items().length) {
-        <div aria-hidden="true" class="knowledge-placeholders">
-          @for (row of [1, 2, 3]; track row) {
-            <div class="knowledge-placeholder"></div>
-          }
-        </div>
-      }
+      <p
+        appLoadingStatus
+        [appearance]="store.items().length ? 'inline' : 'list'"
+      >
+        {{ t("knowledge.browseLoading") }}
+      </p>
     } @else if (
       store.initialized() && !store.items().length && !store.error()
     ) {
@@ -154,10 +168,11 @@
     @if (store.nextCursor()) {
       <div class="knowledge-pagination">
         <button
+          appLoadingButton
           class="button secondary"
           type="button"
-          [disabled]="store.loading()"
           (click)="store.more()"
+          [loading]="store.loading()"
         >
           {{ t("knowledge.loadMore") }}
         </button>

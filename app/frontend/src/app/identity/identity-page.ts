@@ -1,3 +1,5 @@
+import { LoadingStatus } from '../shared/ui/loading-status';
+import { LoadingButton } from '../shared/ui/loading-button';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,7 +16,13 @@ import { TranslocoDirective } from '@jsverse/transloco';
 import { IdentityStore } from './identity.store';
 @Component({
   selector: 'app-identity-page',
-  imports: [ReactiveFormsModule, RouterLink, TranslocoDirective],
+  imports: [
+    LoadingButton,
+    LoadingStatus,
+    ReactiveFormsModule,
+    RouterLink,
+    TranslocoDirective,
+  ],
   templateUrl: './identity-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -116,10 +124,9 @@ export class IdentityPage {
         }
 
         this.store.clear();
-        const match =
-          /^([1-9][0-9]{0,18})\.([A-Za-z0-9_-]{43})$/i.exec(
-            fragment,
-          );
+        const match = /^([1-9][0-9]{0,18})\.([A-Za-z0-9_-]{43})$/i.exec(
+          fragment,
+        );
         this.verification = match ? { id: match[1], token: match[2] } : null;
         this.invalidFragment.set(!match);
 

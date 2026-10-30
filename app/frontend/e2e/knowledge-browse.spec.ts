@@ -229,7 +229,9 @@ test('detail polling preserves content on failure and clears it after access den
   await expect(
     page.getByRole('heading', { name: 'Keep this content' }),
   ).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('Classifying');
+  await expect(page.getByRole('main').getByRole('status')).toContainText(
+    'Classifying',
+  );
   await page.clock.fastForward(5000);
   await expect(page.getByRole('alert')).toContainText('could not be refreshed');
   await expect(

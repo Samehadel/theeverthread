@@ -5,7 +5,9 @@
     class="workspace-management mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p role="status">{{ t("identity.home.loading") }}</p>
+      <p appLoadingStatus appearance="document">
+        {{ t("identity.home.loading") }}
+      </p>
     } @else if (!auth.account()) {
       <h1 class="text-4xl font-semibold">{{ t("workspaceSettings.title") }}</h1>
       @if (auth.errorCode() && !auth.initialized()) {
@@ -61,7 +63,12 @@
                 createForm.controls.name.touched && createForm.invalid
               "
             />
-            <button class="button" [disabled]="busy()">
+            <button
+              appLoadingButton
+              class="button"
+              [disabled]="busy()"
+              [loading]="busy() && errorForm() === 'create'"
+            >
               {{ t("workspaceSettings.createAction") }}
             </button>
           </div>
@@ -133,7 +140,12 @@
                           renameForm.controls.name.touched && renameForm.invalid
                         "
                       />
-                      <button class="button secondary" [disabled]="busy()">
+                      <button
+                        appLoadingButton
+                        class="button secondary"
+                        [disabled]="busy()"
+                        [loading]="busy() && errorForm() === 'rename'"
+                      >
                         {{ t("workspace.renameAction") }}
                       </button>
                       <button
@@ -148,7 +160,7 @@
                     <p [id]="'rename-hint-' + workspace.id" class="form-hint">
                       {{ t("workspaceSettings.nameHint") }}
                     </p>
-                    @if (error() && errorForm() === 'rename') {
+                    @if (error() && errorForm() === "rename") {
                       <p role="alert" class="field-error">{{ t(error()) }}</p>
                     }
                     @if (

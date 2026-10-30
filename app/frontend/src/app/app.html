@@ -1,1 +1,10 @@
+<ng-container *transloco="let t">
+  @if (loading.active()) {
+    <div class="app-progress" aria-hidden="true"><span></span></div>
+    <div class="app-loading" role="status" aria-live="polite">
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <span>{{ t("common.loading") }}</span>
+    </div>
+  }
+</ng-container>
 <app-workspace-shell><router-outlet /></app-workspace-shell>
