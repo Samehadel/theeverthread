@@ -14,7 +14,9 @@
     class="mx-auto max-w-4xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (loading()) {
-      <p appLoadingStatus>{{ t("invitations.loading") }}</p>
+      <p appLoadingStatus appearance="document">
+        {{ t("invitations.loading") }}
+      </p>
     } @else if (loadFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button type="button" class="button mt-6" (click)="load()">

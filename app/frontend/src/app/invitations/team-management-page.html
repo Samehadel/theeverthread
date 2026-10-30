@@ -14,7 +14,7 @@
     class="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p appLoadingStatus>{{ t("invitations.loading") }}</p>
+      <p appLoadingStatus appearance="list">{{ t("invitations.loading") }}</p>
     } @else if (authFailed()) {
       <p role="alert">{{ t("invitations.loadFailed") }}</p>
       <button class="button mt-4" (click)="load()">
@@ -99,7 +99,7 @@
               </p>
             }
             @if (store.invitationsLoading()) {
-              <p appLoadingStatus>{{ t("team.loading") }}</p>
+              <p appLoadingStatus appearance="list">{{ t("team.loading") }}</p>
             } @else if (store.invitationsError()) {
               <p role="alert">
                 {{
@@ -248,7 +248,7 @@
             }
           } @else {
             @if (store.membersLoading()) {
-              <p appLoadingStatus>{{ t("team.loading") }}</p>
+              <p appLoadingStatus appearance="list">{{ t("team.loading") }}</p>
             } @else if (store.membersError()) {
               <p role="alert">
                 {{

@@ -5,7 +5,7 @@
     class="workspace-management mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16"
   >
     @if (auth.loading()) {
-      <p appLoadingStatus>
+      <p appLoadingStatus appearance="document">
         {{ t("identity.home.loading") }}
       </p>
     } @else if (!auth.account()) {

@@ -13,9 +13,14 @@ import {
   host: {
     role: 'status',
     'aria-live': 'polite',
-    '[class.loading-state]': 'active()',
+    '[class.loading-state]': "active() && appearance() === 'inline'",
+    '[class.loading-surface]': "active() && appearance() !== 'inline'",
+    '[class.loading-document]': "appearance() === 'document'",
+    '[class.loading-ai]': "appearance() === 'ai'",
   },
 })
 export class LoadingStatus {
+  readonly appearance = input<'inline' | 'document' | 'list' | 'ai'>('inline');
+  readonly hint = input('');
   readonly active = input(true, { transform: booleanAttribute });
 }

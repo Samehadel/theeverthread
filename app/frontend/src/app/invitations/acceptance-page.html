@@ -21,7 +21,9 @@
       @if (invalidLink()) {
         <p role="alert">{{ t("acceptance.invalid") }}</p>
       } @else if (store.loading()) {
-        <p appLoadingStatus>{{ t("acceptance.loading") }}</p>
+        <p appLoadingStatus appearance="document">
+          {{ t("acceptance.loading") }}
+        </p>
       } @else if (store.account(); as account) {
         <div role="status">
           <h2 class="text-2xl font-semibold">{{ t("acceptance.success") }}</h2>

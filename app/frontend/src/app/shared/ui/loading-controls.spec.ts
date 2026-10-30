@@ -91,4 +91,37 @@ describe('Shared loading controls', () => {
     fixture.detectChanges();
     expect(status.classList.contains('loading-state')).toBe(true);
   });
+  it('renders decorative AI placeholders without exposing fake generated text', () => {
+    const fixture = TestBed.createComponent(LoadingStatus);
+    fixture.componentRef.setInput('appearance', 'ai');
+    fixture.componentRef.setInput('hint', 'Your original stays unchanged.');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.classList.contains('loading-ai')).toBe(true);
+    expect(
+      host.querySelector('.loading-preview')?.getAttribute('aria-hidden'),
+    ).toBe('true');
+    expect(host.querySelector('.loading-status-hint')?.textContent).toBe(
+      'Your original stays unchanged.',
+    );
+    expect(host.querySelectorAll('.skeleton-line')).toHaveLength(3);
+    fixture.componentRef.setInput('active', false);
+    fixture.detectChanges();
+    expect(host.querySelector('.loading-preview')).toBeNull();
+  });
+
+  it('uses document and list shapes for content fetched from the backend', () => {
+    const fixture = TestBed.createComponent(LoadingStatus);
+    fixture.componentRef.setInput('appearance', 'document');
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('.skeleton-title'),
+    ).not.toBeNull();
+    fixture.componentRef.setInput('appearance', 'list');
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelectorAll('.skeleton-group'),
+    ).toHaveLength(3);
+    expect(fixture.nativeElement.querySelector('.skeleton-title')).toBeNull();
+  });
 });

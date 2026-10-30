@@ -131,16 +131,12 @@
       }
     </ul>
     @if (store.loading()) {
-      <p appLoadingStatus>
+      <p
+        appLoadingStatus
+        [appearance]="store.items().length ? 'inline' : 'list'"
+      >
         {{ t("knowledge.browseLoading") }}
       </p>
-      @if (!store.items().length) {
-        <div aria-hidden="true" class="knowledge-placeholders">
-          @for (row of [1, 2, 3]; track row) {
-            <div class="knowledge-placeholder"></div>
-          }
-        </div>
-      }
     } @else if (
       store.initialized() && !store.items().length && !store.error()
     ) {

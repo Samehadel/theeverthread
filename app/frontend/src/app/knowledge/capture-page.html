@@ -219,7 +219,7 @@
     @if (refinementField() === field) {
     <div aria-live="polite" [attr.aria-busy]="store.refining()">
       @if (store.refining()) {
-      <p appLoadingStatus class="knowledge-hint">
+      <p appLoadingStatus appearance="ai" [hint]="t('knowledge.aiLoadingHint')">
         {{ t('knowledge.refining') }} {{ t('knowledge.fields.' + field) }} · {{
         t('knowledge.modes.' + requestedMode()) }}
       </p>
