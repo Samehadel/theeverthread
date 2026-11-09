@@ -35,8 +35,8 @@ jobs:
       - name: Validate collector and proxy configurations
         run: |
           docker run --rm --entrypoint /bin/promtool \
-            -v "$PWD/deploy/aws/monitoring/runtime/monitoring:/run/secrets:ro" \
-            prom/prometheus:v3.13.5 check config /run/secrets/prometheus.yml
+            -v "$PWD/deploy/aws/monitoring/runtime/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:v3.13.5 check config /etc/prometheus/prometheus.yml
           docker run --rm --env-file deploy/aws/monitoring/runtime/app/host.env \
             -v "$PWD/deploy/aws/monitoring/runtime/app/ca.crt:/run/secrets/monitoring_ca:ro" \
             -v "$PWD/deploy/aws/monitoring/runtime/app/ingestion_token:/run/secrets/ingestion_token:ro" \
