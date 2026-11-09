@@ -16,8 +16,13 @@ done
 
 printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "$1" "$2" > candidate.env
 compose() {
+  local monitoring_args=()
+  if [[ -f /opt/theeverthread/monitoring/runtime/app/enabled ]]; then
+    monitoring_args=(--env-file /opt/theeverthread/monitoring/runtime/app/host.env
+      -f /opt/theeverthread/monitoring/app.compose.yaml)
+  fi
   docker compose --env-file /opt/theeverthread/secrets.env --env-file "$1" \
-    -f /opt/theeverthread/compose.yaml "${@:2}"
+    -f /opt/theeverthread/compose.yaml "${monitoring_args[@]}" "${@:2}"
 }
 
 # Pull before changing the running application. Database image is managed separately.

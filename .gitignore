@@ -4,3 +4,6 @@
 .DS_Store
 .playwright-cli/
 output/playwright/
+
+# Generated monitoring credentials and rendered configuration.
+/deploy/aws/monitoring/runtime/

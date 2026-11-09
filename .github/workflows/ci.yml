@@ -8,6 +8,59 @@ on:
 permissions:
   contents: read
 jobs:
+  monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate monitoring initialization and Compose configuration
+        env:
+          BACKEND_IMAGE: local/backend
+          FRONTEND_IMAGE: local/frontend
+          DB_URL: jdbc:postgresql://example/validation
+          DB_USER: validation
+          DB_PASSWORD: validation-only
+        run: |
+          python3 -B -m unittest discover -s deploy/aws/monitoring -p 'test_*.py'
+          MONITORING_PRIVATE_IP=10.20.0.10 python3 -B deploy/aws/monitoring/init.py monitoring
+          install -d -m 700 deploy/aws/monitoring/runtime/app
+          install -m 444 deploy/aws/monitoring/runtime/monitoring/ca.crt deploy/aws/monitoring/runtime/app/
+          install -m 444 deploy/aws/monitoring/runtime/monitoring/ingestion_token deploy/aws/monitoring/runtime/app/
+          MONITORING_PRIVATE_IP=10.20.0.10 python3 -B deploy/aws/monitoring/init.py app
+          python3 -m json.tool deploy/aws/monitoring/grafana/dashboards/app.json > /dev/null
+          bash -n deploy/aws/deploy.sh deploy/aws/monitoring/manage.sh
+          docker compose --env-file deploy/aws/monitoring/runtime/app/host.env \
+            -f deploy/aws/compose.yaml -f deploy/aws/monitoring/app.compose.yaml config --quiet
+          docker compose --env-file deploy/aws/monitoring/runtime/monitoring/host.env \
+            -f deploy/aws/monitoring/compose.yaml config --quiet
+      - name: Validate collector and proxy configurations
+        run: |
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/deploy/aws/monitoring/runtime/monitoring:/run/secrets:ro" \
+            prom/prometheus:v3.13.5 check config /run/secrets/prometheus.yml
+          docker run --rm --env-file deploy/aws/monitoring/runtime/app/host.env \
+            -v "$PWD/deploy/aws/monitoring/runtime/app/ca.crt:/run/secrets/monitoring_ca:ro" \
+            -v "$PWD/deploy/aws/monitoring/runtime/app/ingestion_token:/run/secrets/ingestion_token:ro" \
+            -v "$PWD/deploy/aws/monitoring/runtime/app/prometheus_token:/run/secrets/prometheus_token:ro" \
+            -v "$PWD/deploy/aws/monitoring/config.alloy:/etc/alloy/config.alloy:ro" \
+            grafana/alloy:v1.21.3 validate /etc/alloy/config.alloy
+          docker run --rm \
+            -v "$PWD/deploy/aws/monitoring/loki.yaml:/etc/loki/config.yaml:ro" \
+            grafana/loki:3.7.9 -config.file=/etc/loki/config.yaml -verify-config=true
+          docker run --rm \
+            -v "$PWD/deploy/aws/monitoring/blackbox.yaml:/etc/blackbox/config.yaml:ro" \
+            prom/blackbox-exporter:v0.27.0 --config.file=/etc/blackbox/config.yaml --config.check
+          docker run --rm \
+            -v "$PWD/deploy/aws/monitoring/ingress.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/deploy/aws/monitoring/runtime/monitoring/tls.crt:/run/secrets/tls_certificate:ro" \
+            -v "$PWD/deploy/aws/monitoring/runtime/monitoring/tls.key:/run/secrets/tls_key:ro" \
+            -v "$PWD/deploy/aws/monitoring/runtime/monitoring/ingestion.map:/run/secrets/ingestion_map:ro" \
+            nginx:stable-alpine nginx -t
+          docker run --rm \
+            -v "$PWD/deploy/aws/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:stable-alpine nginx -t
+      - name: Verify collector graph starts without network egress
+        run: python3 -B deploy/aws/monitoring/check_collector_startup.py
+
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +116,7 @@ jobs:
           retention-days: 3
 
   verify:
-    needs: [backend, frontend]
+    needs: [backend, frontend, monitoring]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

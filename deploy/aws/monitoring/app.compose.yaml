@@ -1,0 +1,86 @@
+# App EC2 overlay; merge after deploy/aws/compose.yaml.
+services:
+  backend:
+    environment:
+      SPRING_CONFIG_IMPORT: optional:configtree:/run/secrets/
+      HTTP_LATENCY_HISTOGRAM_ENABLED: 'true'
+    secrets:
+    - source: prometheus_token
+      target: theeverthread.monitoring.token
+    logging:
+      options:
+        labels: com.docker.compose.service,com.docker.compose.project
+  frontend:
+    logging:
+      options:
+        labels: com.docker.compose.service,com.docker.compose.project
+  alloy:
+    image: grafana/alloy:v1.21.3
+    restart: unless-stopped
+    user: 0:0
+    command:
+    - run
+    - --storage.path=/var/lib/alloy/data
+    - --server.http.listen-addr=0.0.0.0:12345
+    - --disable-reporting
+    - /etc/alloy/config.alloy
+    volumes:
+    - ./monitoring/config.alloy:/etc/alloy/config.alloy:ro
+    - alloy_data:/var/lib/alloy/data
+    - ${DOCKER_LOG_ROOT:-/var/lib/docker/containers}:/host/docker:ro
+    - /var/log:/host/var/log:ro
+    - /run/log:/host/run/log:ro
+    - /etc/machine-id:/etc/machine-id:ro
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 384m
+    logging: &id001
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    networks:
+    - default
+    - collectors
+    environment:
+      MONITORING_INGEST_URL: ${MONITORING_INGEST_URL:?Run monitoring/manage.sh app
+        init first}
+    secrets:
+    - prometheus_token
+    - ingestion_token
+    - monitoring_ca
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command:
+    - --path.procfs=/host/proc
+    - --path.sysfs=/host/sys
+    - --path.rootfs=/host/root
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)
+    volumes:
+    - /proc:/host/proc:ro
+    - /sys:/host/sys:ro
+    - /:/host/root:ro,rslave
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 96m
+    logging: *id001
+    networks:
+    - collectors
+secrets:
+  prometheus_token:
+    file: ./monitoring/runtime/app/prometheus_token
+  ingestion_token:
+    file: ./monitoring/runtime/app/ingestion_token
+  monitoring_ca:
+    file: ./monitoring/runtime/app/ca.crt
+networks:
+  collectors:
+    internal: true
+volumes:
+  alloy_data: null

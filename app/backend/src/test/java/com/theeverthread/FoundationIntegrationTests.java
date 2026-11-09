@@ -18,7 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "theeverthread.monitoring.token=local-monitoring-integration-test-token")
 class FoundationIntegrationTests {
     @Container
     static PostgreSQLContainer database = new PostgreSQLContainer("postgres:17.6-alpine");
@@ -62,6 +64,35 @@ class FoundationIntegrationTests {
         assertThat(post.statusCode()).isEqualTo(403);
         assertThat(mapper.readTree(post.body()).path("error").path("code").asText()).isEqualTo("CSRF_INVALID");
     }
+    @Test
+    void prometheusRequiresItsOwnTokenAndReturnsUnwrappedMetrics() throws Exception {
+        assertThat(get("/actuator/prometheus").statusCode()).isEqualTo(401);
+        for (String token : new String[] {"incorrect", "local-monitoring-integration-test-token"}) {
+            var request = HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + port + "/actuator/prometheus"))
+                    .header("Authorization", "Bearer " + token)
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .GET()
+                    .build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (token.equals("incorrect")) {
+                assertThat(response.statusCode()).isEqualTo(401);
+            } else {
+                assertThat(response.statusCode()).isEqualTo(200);
+                assertThat(response.body()).contains("jvm_memory_used_bytes");
+                assertThat(response.headers().firstValue("Content-Type").orElseThrow())
+                        .contains("text/plain");
+            }
+        }
+        var otherEndpoint = HttpRequest.newBuilder(
+                        URI.create("http://127.0.0.1:" + port + "/actuator/metrics"))
+                .header("Authorization", "Bearer local-monitoring-integration-test-token")
+                .GET()
+                .build();
+        assertThat(client.send(otherEndpoint, HttpResponse.BodyHandlers.ofString()).statusCode())
+                .isEqualTo(401);
+    }
+
     @Test
     void databaseOutageFailsReadinessButNotLivenessAndRecovers() throws Exception {
         database.getDockerClient().pauseContainerCmd(database.getContainerId()).exec();

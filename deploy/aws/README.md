@@ -57,6 +57,12 @@ enough to grant AWS access. Configure `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, and
 
 ## Operation and recovery
 
+For a dedicated monitoring EC2 with a private Grafana dashboard, Prometheus
+metrics, Loki application/server logs, and uptime checks, follow
+[self-hosted monitoring](monitoring/README.md).
+Monitoring is opt-in and has no notification channels. Its server configuration
+must be copied explicitly along with the updated deployment script.
+
 The server pulls both images before changing containers, waits for health checks,
 and checks `/api/status` through Nginx. Failed SSM commands fail the Actions job.
 Deployments are serialized in Actions and by a server lock. `current.env` records

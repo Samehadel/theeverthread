@@ -65,6 +65,10 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: ${HTTP_LATENCY_HISTOGRAM_ENABLED:false}
   endpoint:
     health:
       show-details: when-authorized
