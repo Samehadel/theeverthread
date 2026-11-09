@@ -5,6 +5,7 @@ import com.theeverthread.identity.api.service.IdentityService;
 
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.http.HttpMethod;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -22,6 +23,8 @@ import org.springframework.security.web.csrf.*;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.util.List;
 
@@ -87,7 +90,8 @@ class SecurityConfiguration {
             RefreshSessions refresh,
             IdentityService identity,
             SocialLoginHandler socialLogin,
-            SocialOidcUsers socialOidcUsers)
+            SocialOidcUsers socialOidcUsers,
+            @Value("${theeverthread.monitoring.token:}") String monitoringToken)
             throws Exception {
         return http.sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -142,6 +146,14 @@ class SecurityConfiguration {
                                         .permitAll()
                                         .requestMatchers("/api/workspaces", "/api/workspaces/*")
                                         .authenticated()
+                                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus")
+                                        .access(
+                                                (authentication, context) ->
+                                                        new AuthorizationDecision(
+                                                                validMonitoringToken(
+                                                                        monitoringToken,
+                                                                        context.getRequest()
+                                                                                .getHeader("Authorization"))))
                                         .requestMatchers("/actuator/**")
                                         .access(
                                                 (authentication, context) ->
@@ -219,5 +231,14 @@ class SecurityConfiguration {
         response.setStatus(status);
         response.setContentType("application/json");
         mapper.writeValue(response.getOutputStream(), ApiEnvelope.failure(code, message));
+    }
+
+    private static boolean validMonitoringToken(String token, String authorization) {
+        // Disabled by default; application sessions never grant collector access.
+        return token.length() >= 32
+                && authorization != null
+                && MessageDigest.isEqual(
+                        ("Bearer " + token).getBytes(StandardCharsets.UTF_8),
+                        authorization.getBytes(StandardCharsets.UTF_8));
     }
 }
