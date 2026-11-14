@@ -8,8 +8,8 @@ volumes. Never commit credentials.
 The selected topology has Prometheus pull Spring and Node Exporter metrics,
 Alloy ship application logs to Loki, Blackbox probe public HTTPS, and Grafana
 query Prometheus and Loki. Monitoring runs on a separate EC2. Cross-host telemetry
-will use mTLS. Those service definitions will be added in subsequent steps;
-this first step prepares the host only.
+will use mTLS. Step 2 starts only Grafana and Prometheus; cross-host collection
+and the remaining services will be added in subsequent steps.
 
 ## Step 1: prepare the monitoring host
 
@@ -55,3 +55,62 @@ Expect a successful Docker test, a Compose version, and approximately 2 GiB of
 swap (or the host's existing swap). Share those results before the next step.
 
 Reference: [Docker Engine installation on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+
+## Step 2: start Prometheus and Grafana
+
+Copy the tracked monitoring directory from your local checkout to EC2. Exclude
+local `runtime/` and `.env` files; never overwrite the server's runtime directory.
+For example, from the repository root on your computer:
+
+```bash
+rsync -av --exclude runtime/ --exclude .env \
+  -e 'ssh -i /path/to/key.pem' deploy/aws/monitoring/ \
+  ubuntu@MONITORING_PUBLIC_IP:~/monitoring/
+```
+
+On the monitoring EC2:
+
+```bash
+cd ~/monitoring
+bash init.sh
+sudo docker compose config --quiet
+sudo docker compose up -d --wait --wait-timeout 180
+sudo docker compose ps
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+`compose.yaml` defines the two services, persistent named volumes and 512 MiB
+memory limits per service. Go's soft memory target is 384 MiB; these limits are
+initial budgets, not a guarantee against memory exhaustion under higher load.
+Container logs rotate at 5 MiB with two files. Prometheus is pinned to 3.13.5 LTS
+and Grafana to 13.3.0; upgrade image tags deliberately in Git.
+
+`prometheus.yml` scrapes Prometheus itself every 30 seconds. It does not yet
+collect application or host metrics. Retention is seven days or 5 GiB, whichever
+is reached first, plus working-space overhead. Prometheus has no published port.
+The `telemetry` Docker network is internal; Grafana also joins the default network
+to support its loopback-published port.
+
+`grafana/provisioning/datasources/prometheus.yaml` automatically registers the
+Prometheus data source. Grafana has no anonymous access or public signup, and
+notification alerting is disabled. `init.sh` creates a random bootstrap admin
+password under ignored `runtime/`. Its file is readable by the non-root Grafana
+container but protected on the host by its owner-only parent directory. Running
+the script again preserves the password. Grafana stores users in its volume:
+editing the bootstrap file later does not rotate an existing user's password.
+
+From your computer, leave this tunnel running:
+
+```bash
+ssh -i /path/to/key.pem -N -o ExitOnForwardFailure=yes \
+  -L 3000:127.0.0.1:3000 ubuntu@MONITORING_PUBLIC_IP
+```
+
+Open http://localhost:3000. Username: `admin`. Read the initial password **on EC2**
+using `cat ~/monitoring/runtime/grafana_password`; do not send it in chat.
+In Grafana Explore, select Prometheus and query `up`. Expect one healthy target,
+`job="prometheus"`. Application metrics will arrive in a later step.
+
+To inspect resource usage, run `sudo docker stats --no-stream`. To stop services
+without deleting their data, run `sudo docker compose down`. Do not add `-v`
+unless you intentionally want to delete the stored metrics and Grafana state.
