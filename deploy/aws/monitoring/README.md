@@ -114,3 +114,47 @@ In Grafana Explore, select Prometheus and query `up`. Expect one healthy target,
 To inspect resource usage, run `sudo docker stats --no-stream`. To stop services
 without deleting their data, run `sudo docker compose down`. Do not add `-v`
 unless you intentionally want to delete the stored metrics and Grafana state.
+
+## Step 3: monitor the monitoring EC2
+
+The `monitoring-node` service runs Node Exporter 1.12.1 on the monitoring host.
+It reads host `/proc`, `/sys`, and the root filesystem through read-only mounts,
+with the host PID namespace, dropped capabilities, and a 96 MiB memory limit.
+These mounts provide host CPU, memory, and filesystem measurements rather than
+only the container's view. They expose host information to this trusted exporter;
+it is not privileged and has no Docker socket.
+
+It joins only the internal `telemetry` network and publishes no host port.
+Prometheus scrapes `monitoring-node:9100` as job `monitoring-server` every 30
+seconds. Both services are on this same EC2, so this hop uses internal HTTP;
+no new security-group rule or cross-host certificate is needed for this step.
+The separate application Node Exporter will use mTLS in a later step.
+
+Repeat the Step 2 rsync command from your computer, preserving `runtime/`.
+Then on EC2:
+
+```bash
+cd ~/monitoring
+sudo docker compose config --quiet
+sudo docker compose up -d monitoring-node
+sudo docker compose restart prometheus
+sudo docker compose ps
+sudo docker stats --no-stream
+```
+
+Prometheus needs a restart to read its changed scrape configuration; stored
+metrics remain in its persistent volume. Wait about 30–60 seconds. In Grafana
+Explore, run each query:
+
+```promql
+up{job="monitoring-server"}
+node_memory_MemTotal_bytes{job="monitoring-server"} / 1024 / 1024 / 1024
+100 * (1 - node_memory_MemAvailable_bytes{job="monitoring-server"} / node_memory_MemTotal_bytes{job="monitoring-server"})
+node_filesystem_avail_bytes{job="monitoring-server",mountpoint="/",fstype!="rootfs"} / 1024 / 1024 / 1024
+```
+
+Expect `up` to be 1, memory total roughly matching `free -h`, memory used as a
+percentage, and root filesystem available space roughly matching `df -h /`.
+Linux tools use GiB here despite Grafana queries returning unlabelled numbers.
+Node Exporter itself has no container healthcheck; its `Up` status shows process
+liveness, while the Prometheus `up` query verifies successful metric collection.

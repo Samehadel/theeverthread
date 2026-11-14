@@ -55,6 +55,27 @@ services:
       retries: 10
     logging: *logging
 
+  monitoring-node:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    environment:
+      GOMEMLIMIT: 64MiB
+    networks: [telemetry]
+    logging: *logging
+
 secrets:
   grafana_password:
     file: ./runtime/grafana_password
