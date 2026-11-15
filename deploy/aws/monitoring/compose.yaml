@@ -55,6 +55,20 @@ services:
       retries: 10
     logging: *logging
 
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.1
+    restart: unless-stopped
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [default, telemetry]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    environment:
+      GOMEMLIMIT: 40MiB
+    logging: *logging
+
   monitoring-node:
     image: prom/node-exporter:v1.12.1
     restart: unless-stopped

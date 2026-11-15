@@ -158,3 +158,50 @@ percentage, and root filesystem available space roughly matching `df -h /`.
 Linux tools use GiB here despite Grafana queries returning unlabelled numbers.
 Node Exporter itself has no container healthcheck; its `Up` status shows process
 liveness, while the Prometheus `up` query verifies successful metric collection.
+
+## Step 4: check public HTTPS uptime
+
+`blackbox.yml` defines `https_2xx`: a 10-second HTTP probe requiring a successful
+2xx response over TLS with normal certificate validation. Redirects are followed,
+and a final non-HTTPS response fails. It prefers IPv4, with IPv6 fallback.
+Blackbox Exporter 0.29.1 runs on the monitoring EC2 with a 64 MiB memory limit.
+It joins the default network for outbound requests and `telemetry` for Prometheus
+access; port 9115 is not published. No additional inbound security-group rule is
+needed. Outbound HTTPS must reach the public application URL.
+
+Prometheus job `public-uptime` invokes the probe every 30 seconds with a 15-second
+scrape timeout. The confirmed target is `https://theeverthread.com/`, recorded in
+`prometheus.yml`. Relabeling passes this URL to Blackbox as `target`, preserves it
+as `instance`, then directs the scrape to `blackbox:9115`. Job `blackbox` collects
+the exporter's own process metrics separately.
+
+Repeat the Step 2 rsync command from your computer. On the monitoring EC2:
+
+```bash
+cd ~/monitoring
+sudo docker compose config --quiet
+sudo docker compose up -d blackbox
+sudo docker compose restart prometheus
+sudo docker compose ps
+```
+
+After 30–60 seconds, use Grafana Explore:
+
+```promql
+up{job="public-uptime"}
+probe_success{job="public-uptime"}
+probe_duration_seconds{job="public-uptime"}
+```
+
+`up=1` means Prometheus received the probe report. `probe_success=1` means the
+website actually passed the HTTPS check; a failed website can still have `up=1`.
+Duration is the total probe time in seconds, including network connection work.
+To inspect an unsuccessful probe on EC2:
+
+```bash
+sudo docker compose exec prometheus wget -qO- 'http://blackbox:9115/probe?module=https_2xx&target=https%3A%2F%2Ftheeverthread.com%2F&debug=true'
+```
+
+This verifies the public root URL from the monitoring EC2's location. It does
+not yet verify database readiness, browser journeys, or every user location.
+No notification rules or channels are enabled.
