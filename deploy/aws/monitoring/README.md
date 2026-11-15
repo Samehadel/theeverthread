@@ -205,3 +205,59 @@ sudo docker compose exec prometheus wget -qO- 'http://blackbox:9115/probe?module
 This verifies the public root URL from the monitoring EC2's location. It does
 not yet verify database readiness, browser journeys, or every user location.
 No notification rules or channels are enabled.
+
+## Step 5a: prepare cross-host mTLS identities
+
+Confirmed private addresses: application `172.31.45.83`, monitoring
+`172.31.41.48`. First prepare certificates; do not change the working Compose
+stack yet. Subsequent steps will expose the application's Node Exporter on its
+private IP port 9100 and add its HTTPS scrape to Prometheus.
+
+Copy updated tracked files using the Step 2 rsync command. **On monitoring EC2**:
+
+```bash
+cd ~/monitoring
+python3 init-mtls.py --app-ip 172.31.45.83
+openssl x509 -in runtime/pki/app-node/cert.pem -noout -dates -ext subjectAltName
+openssl verify -CAfile runtime/pki/ca/cert.pem -purpose sslserver \
+  -verify_ip 172.31.45.83 runtime/pki/app-node/cert.pem
+openssl verify -CAfile runtime/pki/ca/cert.pem -purpose sslclient \
+  runtime/pki/prometheus/cert.pem
+```
+
+The Python script uses the system OpenSSL binary, with no pip dependencies.
+It creates three protected directories under ignored `runtime/pki/`:
+
+| Directory | Role | Destination |
+| --- | --- | --- |
+| `ca/` | Signs and verifies monitoring identities | Keep on monitoring; never mount or transfer its private key |
+| `prometheus/` | Client certificate, key and public CA certificate | Keep on monitoring; future Prometheus mount |
+| `app-node/` | Server certificate, key and public CA certificate | Transfer only this directory to application EC2 in the next step |
+
+The app certificate identifies `172.31.45.83` and allows server authentication
+only. Prometheus's certificate allows client authentication only. Each leaf
+certificate expires after 90 days; the private CA lasts 10 years. CA key mode is
+0600. Container credential files are 0444 inside host directories of mode 0700,
+so Docker can mount individual files for non-root services without making the
+host directory accessible to other users. The operator who generates them can
+read them. No credentials are printed by the script.
+
+For this small installation, both identity keypairs are initially generated on
+monitoring; its operator therefore also has access to the application exporter
+key. The app bundle must later be transferred through authenticated SSH, never
+through Git, chat or a public download. Back up the CA privately.
+
+Rerunning preserves credentials and verifies trust, key matching, server IP,
+certificate purpose and at least 30 days remaining validity. A changed app IP or
+expiring certificate causes an error. Run with `--renew` to replace both leaf
+identities while retaining the CA. Transfer the renewed app bundle and recreate
+affected containers after renewal, because single-file mounts can retain old
+inodes. Do not delete the CA to renew a leaf certificate. Automatic renewal is
+not implemented yet; complete renewal scheduling before depending on unattended
+operation. Existing connections are not immediately revoked by certificate
+expiry, and replacing a leaf does not revoke the old certificate; compromise
+requires a separate trust-replacement procedure. A failed run may leave partial
+files; inspect errors rather than deleting or silently replacing trust.
+
+This checkpoint creates and verifies credentials only. No new ports are opened,
+services started, or application containers changed.
