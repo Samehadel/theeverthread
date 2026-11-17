@@ -1,0 +1,17 @@
+# Merge after /opt/theeverthread/compose.yaml on the application EC2.
+# Requires a backend image containing MonitoringConfiguration.
+services:
+  backend:
+    environment:
+      THEEVERTHREAD_MONITORING_ENABLED: 'true'
+      HTTP_LATENCY_HISTOGRAM_ENABLED: 'true'
+    ports:
+      - 172.31.45.83:8443:8443
+    secrets: [metrics_certificate, metrics_key, metrics_ca]
+secrets:
+  metrics_certificate:
+    file: /home/ubuntu/monitoring/runtime/pki/app-node/cert.pem
+  metrics_key:
+    file: /home/ubuntu/monitoring/runtime/pki/app-node/key.pem
+  metrics_ca:
+    file: /home/ubuntu/monitoring/runtime/pki/app-node/ca.pem

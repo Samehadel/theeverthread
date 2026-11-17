@@ -353,3 +353,98 @@ node_filesystem_avail_bytes{job="application-server",mountpoint="/",fstype!="roo
 
 Compare to `free -h` and `df -h /` on the application EC2. Application JVM/HTTP
 metrics and log delivery are separate upcoming steps.
+
+## Step 6: Spring metrics on private port 8443
+
+**Release prerequisite:** the backend image must contain `MonitoringConfiguration`.
+An old image will ignore the new property and never open 8443. Do not enable
+the overlay on the current production image until the new backend has been built
+and released. The repository's production workflow publishes images from `main`;
+committing this branch does not deploy it or update the production image.
+
+The optional configuration is enabled only by `theeverthread.monitoring.enabled`.
+It adds a TLS connector to embedded Tomcat on 8443, alongside the existing HTTP
+8080 connector. This deliberately does not set `management.server.port`: moving
+all Actuator endpoints would otherwise move the working health probes. Existing
+HTTP health/readiness URLs and Docker healthchecks remain in place. The new
+connector shares the Spring context but has a separate, higher-priority security
+chain. Only GET `/actuator/prometheus` is authorized there; all other routes are
+denied, even to the monitoring identity. HTTP 8080 still denies metrics.
+
+Reuse `runtime/pki/app-node/cert.pem` and `key.pem` as Spring's server identity,
+and `ca.pem` as the trusted client CA. Java loads that existing public PEM CA into
+an in-memory trust store for Tomcat's JSSE implementation. No new CA, private key,
+or certificate is generated. Tomcat requires client certificates at the TLS
+handshake. Spring Security then accepts only certificate CN `theeverthread
+prometheus` for metrics; sessions cannot grant access on this stateless connector.
+Both the cryptographic trust check and the identity authorization must pass.
+
+`backend.compose.yaml` overlays only the backend service of the existing
+`/opt/theeverthread/compose.yaml`. It adds the certificate mounts, enables latency
+histograms, and publishes **172.31.45.83:8443**, not the public interface. Paths in
+the overlay are absolute because Compose resolves overlay-relative paths against
+the base file. It does not alter frontend ports 80/443 or its TLS configuration.
+Preserve the live base Compose and Nginx files: the running server's manually
+added HTTPS configuration differs from the repository's older frontend setup.
+Do not overwrite those live files as part of this monitoring activation.
+
+After releasing the new backend image, copy this overlay to
+`/home/ubuntu/monitoring/backend.compose.yaml` and the updated deploy script to
+`/opt/theeverthread/deploy.sh`. Retain the app private-key directory protection.
+Then, on application EC2, using its currently deployed image references:
+
+```bash
+sudo bash <<'SH'
+set -euo pipefail
+cd /opt/theeverthread
+exec 9>deploy.lock
+flock -n 9
+docker compose --env-file secrets.env --env-file current.env \
+  -f compose.yaml -f /home/ubuntu/monitoring/backend.compose.yaml config --quiet
+docker compose --env-file secrets.env --env-file current.env \
+  -f compose.yaml -f /home/ubuntu/monitoring/backend.compose.yaml \
+  up -d --no-deps --wait --wait-timeout 300 backend
+touch monitoring.enabled
+SH
+```
+
+`current.env` must already refer to the new backend image. This recreates only the
+backend and leaves the frontend image/container in place. The marker makes future
+deployments include the overlay; create it only after successful activation.
+The deploy script and overlay must remain installed on the app host. This is not
+automatically deployed from the repository by the existing workflow.
+
+On monitoring, test Spring with the same client identity that worked for Node
+Exporter:
+
+```bash
+cd ~/monitoring
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+  --cacert runtime/pki/prometheus/ca.pem \
+  --cert runtime/pki/prometheus/cert.pem \
+  --key runtime/pki/prometheus/key.pem \
+  https://172.31.45.83:8443/actuator/prometheus -o /tmp/spring-metrics.txt
+head -n 5 /tmp/spring-metrics.txt
+```
+
+Without the client certificate/key, TLS must fail. With the trusted identity,
+`/actuator/metrics` and `/api/status` on port 8443 must be denied. Check the normal
+site and HTTP health probes too. Only once the listener is ready, copy the updated
+tracked monitoring configuration and restart Prometheus to load job `backend`.
+Before activation this job will correctly report down.
+
+Grafana Explore checks:
+
+```promql
+up{job="backend"}
+jvm_memory_used_bytes{job="backend"}
+sum(rate(http_server_requests_seconds_count{job="backend"}[5m]))
+```
+
+Expect `up=1`. Request-rate queries need a few minutes of samples and real
+application traffic. The histogram is enabled through the overlay; Actuator
+request URI series are excluded from ingestion. The backend connector is
+disabled by default, including normal local development. Renewing the shared
+application identity requires recreating both Node Exporter and backend to pick
+up replaced certificate bind mounts. Restart backend to reload its Java trust
+store if the CA changes; never silently replace that CA during leaf renewal.
