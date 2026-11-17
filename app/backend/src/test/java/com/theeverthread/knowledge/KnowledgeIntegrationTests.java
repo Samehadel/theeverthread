@@ -18,12 +18,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -53,7 +56,11 @@ class KnowledgeIntegrationTests {
     @Autowired AttributeCatalog catalog;
     @Autowired MockMvc mvc;
     @Autowired JsonMapper json;
-    @MockitoBean KnowledgeAi ai;
+    @MockitoBean
+    KnowledgeAi ai;
+
+    @MockitoSpyBean
+    Clock clock;
     Long workspace;
     Long author;
 
@@ -115,8 +122,12 @@ class KnowledgeIntegrationTests {
 
     @Test
     void creatorEditsThroughHttpAndPublicationRetriesKeepTheirOriginalMeaning() throws Exception {
+        // Exercise clocks finer than PostgreSQL's microsecond timestamp precision on every OS.
+        doReturn(Instant.parse("2026-11-17T12:00:00.123456789Z")).when(clock).instant();
         var original = request();
         var created = knowledge.create("member@example.com", workspace, original);
+        // Compare durable timestamps so database precision does not look like an edit.
+        var published = knowledge.get("member@example.com", workspace, created.id());
         mvc.perform(
                         put("/api/knowledge/tickets/" + created.id())
                                 .with(user("member@example.com"))
@@ -132,7 +143,7 @@ class KnowledgeIntegrationTests {
                 .andExpect(jsonPath("$.data.content.title").value("Updated title"));
         var saved = knowledge.get("member@example.com", workspace, created.id());
         assertThat(saved.authorId()).isEqualTo(created.authorId());
-        assertThat(saved.createdAt()).isEqualTo(created.createdAt());
+        assertThat(saved.createdAt()).isEqualTo(published.createdAt());
         assertThat(saved.content()).isEqualTo(editedContent("Updated title"));
         assertThat(knowledge.create("member@example.com", workspace, original)).isEqualTo(saved);
         assertThatThrownBy(
@@ -252,7 +263,7 @@ class KnowledgeIntegrationTests {
         var created = knowledge.create("member@example.com", workspace, request());
         jdbc.update(
                 "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
-                    + " second'");
+                        + " second'");
         var oldWork = transactions.claim();
         var saved =
                 knowledge.update(
@@ -268,7 +279,7 @@ class KnowledgeIntegrationTests {
         assertThat(pending.attributes()).isEmpty();
         jdbc.update(
                 "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
-                    + " second'");
+                        + " second'");
         var newWork = transactions.claim();
         assertThat(newWork.content()).isEqualTo(saved.content());
         transactions.complete(newWork, List.of("area:backend"), catalog.definitions());
