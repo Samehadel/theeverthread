@@ -1,3 +1,4 @@
+import { AuthStore } from '../core/auth.store';
 import { LoadingStatus } from '../shared/ui/loading-status';
 import { LoadingButton } from '../shared/ui/loading-button';
 import { AttributeCatalogStore } from './attribute-catalog.store';
@@ -29,6 +30,8 @@ import { attributeLabels, fullDate } from './knowledge.models';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TicketPage {
+  readonly auth = inject(AuthStore);
+  readonly updated = history.state?.updated === true;
   readonly store = inject(KnowledgeStore);
   readonly catalog = inject(AttributeCatalogStore);
   readonly labels = (ids: string[]) =>

@@ -7,7 +7,7 @@ import {
 import { BrowseStore } from './browse.store';
 import { AuthStore } from '../core/auth.store';
 import { Account } from '../identity/identity.api';
-import { TicketSummary } from './knowledge.models';
+import { Ticket, TicketSummary } from './knowledge.models';
 
 const account = { id: 'author', workspaceId: 'org' } as Account;
 const summary = {
@@ -85,6 +85,32 @@ describe('Workspace knowledge browsing session', () => {
       .flush({ data: { items: [], nextCursor: null } });
     expect(store.detailsType()).toBe('Coding');
     expect(store.initialized()).toBe(true);
+  });
+  it('updates edited summaries and removes tickets that no longer match the active filter', () => {
+    firstPage();
+    const edited = {
+      id: 'one',
+      content: {
+        title: 'Edited title',
+        capture: '🙂'.repeat(300),
+        template: 'Knowledge',
+        details: [],
+      },
+      classificationStatus: 'PENDING',
+      attributes: [],
+    } as unknown as Ticket;
+    store.updateTicket(edited);
+    expect(store.items()[0]).toMatchObject({
+      title: 'Edited title',
+      capturePreview: '🙂'.repeat(280),
+      detailsType: 'Knowledge',
+    });
+    store.refresh('Coding');
+    http
+      .expectOne('/api/knowledge/tickets?detailsType=Coding')
+      .flush({ data: { items: [summary], nextCursor: null } });
+    store.updateTicket(edited);
+    expect(store.items()).toEqual([]);
   });
   it.each([401, 403, 404])(
     'clears content on denied collection reads (%s)',

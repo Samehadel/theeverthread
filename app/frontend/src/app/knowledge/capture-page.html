@@ -11,21 +11,38 @@
     <div class="knowledge-writing">
       <div class="flex items-center justify-between gap-4">
         <p class="eyebrow">{{ t("knowledge.eyebrow") }}</p>
-        <a class="button secondary" routerLink="/workspace"
+        <a class="button secondary" [routerLink]="cancelLink"
           >{{ t("knowledge.cancel") }}</a
         >
       </div>
-      <h1>{{ t("knowledge.title") }}</h1>
-      <p class="knowledge-intro">{{ t("knowledge.intro") }}</p>
+      <h1>{{ t(editId ? "knowledge.editTitle" : "knowledge.title") }}</h1>
+      <p class="knowledge-intro">
+        {{ t(editId ? "knowledge.editIntro" : "knowledge.intro") }}
+      </p>
       @if (workspaceChanged()) {
       <p role="alert" class="form-alert">
         {{ t("knowledge.workspaceChanged") }}
         <a routerLink="/workspace">{{ t("workspace.selectRequired") }}</a>
       </p>
-      }
+      } @if (editId && !initialized()) { @if (editForbidden()) {
+      <p role="alert" class="form-alert">{{ t('knowledge.editForbidden') }}</p>
+      } @else if (store.error()) {
+      <p role="alert" class="form-alert">{{ t(store.error()) }}</p>
+      <button
+        type="button"
+        class="button secondary"
+        (click)="store.load(editId)"
+      >
+        {{ t('identity.retry') }}
+      </button>
+      } @else {
+      <p appLoadingStatus appearance="document">{{ t('knowledge.loading') }}</p>
+      } } @else {
       <form class="knowledge-card" (ngSubmit)="publish()">
         <fieldset [disabled]="locked()" class="knowledge-fields">
-          <legend class="sr-only">{{ t("knowledge.title") }}</legend>
+          <legend class="sr-only">
+            {{ t(editId ? "knowledge.editTitle" : "knowledge.title") }}
+          </legend>
           <div class="knowledge-field">
             <div class="knowledge-label">
               <label for="ticket-title"
@@ -129,28 +146,37 @@
         </fieldset>
         @if (store.error()) {
         <p role="alert" class="form-alert">{{ t(store.error()) }}</p>
-        <p class="knowledge-hint">{{ t("knowledge.retryHint") }}</p>
+        <p class="knowledge-hint">
+          {{ t(editId ? "knowledge.editRetryHint" : "knowledge.retryHint") }}
+        </p>
         }
         <div class="knowledge-publish">
           <p>
             {{ t("knowledge.visibility") }}<br /><span
-              >{{ t("knowledge.autoAttributes") }}</span
+              >{{ t(editId ? "knowledge.editAttributes" :
+              "knowledge.autoAttributes") }}</span
             >
           </p>
-          <button appLoadingButton
+          <button
+            appLoadingButton
             class="button"
             [disabled]="
               workspaceChanged() || !valid() || store.busy() || store.refining()
             "
             [loading]="store.busy()"
           >
-            {{ t(store.busy() ? "knowledge.publishing" : "knowledge.publish") }}
+            {{ t(editId ? (store.busy() ? "knowledge.saving" : "knowledge.save")
+            : (store.busy() ? "knowledge.publishing" : "knowledge.publish")) }}
           </button>
         </div>
       </form>
+      }
     </div>
+    @if (!editId || initialized()) {
     <aside class="knowledge-sidebar">
-      <p class="eyebrow">{{ t("knowledge.beforeShare") }}</p>
+      <p class="eyebrow">
+        {{ t(editId ? "knowledge.beforeSave" : "knowledge.beforeShare") }}
+      </p>
       <h2>{{ t("knowledge.polish") }}</h2>
       <p>{{ t("knowledge.polishIntro") }}</p>
       <p id="refinement-required" class="refinement-required">
@@ -172,7 +198,8 @@
           [attr.aria-label]="t(field === 'title' ? 'knowledge.refineTitle' : 'knowledge.refineCapture')"
         >
           @for (mode of refinementModes; track mode) {
-          <button appLoadingButton
+          <button
+            appLoadingButton
             type="button"
             class="refinement-option"
             [id]="'refine-' + field + '-' + mode"
@@ -211,9 +238,13 @@
       <h3>{{ t("knowledge.workspaceVisibility") }}</h3>
       <p>{{ t("knowledge.workspaceHint") }}</p>
       <h3>{{ t("knowledge.attributes") }}</h3>
-      <p>{{ t("knowledge.attributeHint") }}</p>
+      <p>
+        {{ t(editId ? "knowledge.editAttributeHint" : "knowledge.attributeHint")
+        }}
+      </p>
       <p class="knowledge-hint">{{ t("knowledge.externalAi") }}</p>
     </aside>
+    }
   </main>
   <ng-template #refinementPreview let-field="field">
     @if (refinementField() === field) {

@@ -50,6 +50,19 @@ export class KnowledgeApi {
       workspaceId,
     );
   }
+  update(
+    id: string,
+    version: number,
+    content: TicketContent,
+    workspaceId: string,
+  ) {
+    return this.post<Ticket>(
+      `/api/knowledge/tickets/${id}`,
+      { version, content },
+      workspaceId,
+      'PUT',
+    );
+  }
   refine(
     content: TicketContent,
     field: RefinementField,
@@ -62,7 +75,12 @@ export class KnowledgeApi {
       workspaceId,
     );
   }
-  private post<T>(url: string, body: unknown, workspaceId: string) {
+  private post<T>(
+    url: string,
+    body: unknown,
+    workspaceId: string,
+    method = 'POST',
+  ) {
     const accountId = this.auth.account()?.id;
     return this.http
       .get<{ data: { token: string; headerName: string } }>('/api/auth/csrf')
@@ -87,7 +105,8 @@ export class KnowledgeApi {
                 }),
             );
           }
-          return this.http.post<{ data: T }>(url, body, {
+          return this.http.request<{ data: T }>(method, url, {
+            body,
             headers: {
               [csrf.data.headerName]: csrf.data.token,
               'X-Workspace-Id': workspaceId,

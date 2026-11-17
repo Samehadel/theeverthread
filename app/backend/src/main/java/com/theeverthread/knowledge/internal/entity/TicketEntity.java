@@ -23,7 +23,6 @@ public class TicketEntity {
     private Long authorId;
 
     @Column
-
     private Long workspaceId;
 
     @Column(nullable = false, length = 200)
@@ -35,11 +34,20 @@ public class TicketEntity {
     @Column(nullable = false, columnDefinition = "text")
     private String content;
 
+    @Column(nullable = false, columnDefinition = "text")
+    private String submissionContent;
+
+    @Column(nullable = false)
+    private long version;
+
     @Column(nullable = false)
     private Instant createdAt;
 
     @Column(nullable = false, length = 20)
     private String classificationStatus;
+
+    @Column(length = 40)
+    private String classificationVersion;
 
     @Column(nullable = false, columnDefinition = "text")
     private String attributes;

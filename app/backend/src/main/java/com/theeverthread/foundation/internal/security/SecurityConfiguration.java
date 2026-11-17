@@ -167,6 +167,8 @@ class SecurityConfiguration {
                                                 "/api/knowledge/tickets",
                                                 "/api/knowledge/tickets/*")
                                         .authenticated()
+                                        .requestMatchers(HttpMethod.PUT, "/api/knowledge/tickets/*")
+                                        .authenticated()
                                         .requestMatchers(
                                                 HttpMethod.POST,
                                                 "/api/knowledge/tickets",

@@ -82,8 +82,8 @@ for (const width of [1440, 390]) {
               ...summary(21),
               id: 'ticket-21',
               content: {
-                title: 'Reliable retries 21',
-                capture: 'Reuse the same key.',
+                title: summary(21).title,
+                capture: summary(21).capturePreview,
                 template: 'Coding',
                 details: [
                   { type: 'heading', text: 'Keep the context' },
@@ -136,7 +136,7 @@ for (const width of [1440, 390]) {
     const fetched = calls;
     await page.getByRole('link', { name: /^Reliable retries 21:/ }).click();
     await expect(
-      page.getByRole('heading', { name: 'Reliable retries 21', exact: true }),
+      page.getByRole('heading', { name: summary(21).title, exact: true }),
     ).toBeVisible();
     await expect(page.locator('pre')).toContainText('return');
     await expect(

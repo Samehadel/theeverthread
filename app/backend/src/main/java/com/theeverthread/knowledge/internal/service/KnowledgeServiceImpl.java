@@ -56,7 +56,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         var existing = tickets.findByAuthorIdAndSubmissionId(account.id(), request.submissionId());
         if (existing.isPresent()) {
             if (!existing.get().getWorkspaceId().equals(workspaceId)
-                    || !mapper.content(existing.get().getContent()).equals(request.content()))
+                    || !mapper.content(existing.get().getSubmissionContent())
+                            .equals(request.content()))
                 throw new KnowledgeException(
                         409,
                         "SUBMISSION_CONFLICT",
@@ -70,11 +71,69 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         ticket.setAuthorName(account.fullName());
         ticket.setSubmissionId(request.submissionId());
         ticket.setContent(json.writeValueAsString(request.content()));
+        ticket.setSubmissionContent(ticket.getContent());
         ticket.setCreatedAt(clock.instant());
         ticket.setClassificationStatus("PENDING");
         ticket.setAttributes("[]");
         ticket.setNextAttemptAt(clock.instant());
         return mapper.view(tickets.save(ticket));
+    }
+
+    /** Locks the row against edits and worker claims, then fences classification of old content. */
+    @Override
+    @Transactional
+    public TicketView update(String email, Long workspaceId, Long id, UpdateTicketRequest request) {
+        var account = identity.current(email, workspaceId);
+        var ticket = editableTicket(id, account.workspaceId(), account.id());
+        if (request == null || request.version() == null || request.version() < 0) {
+            TicketRules.invalid("A valid ticket version is required.");
+        }
+        TicketRules.validate(request.content());
+        boolean unchanged = mapper.content(ticket.getContent()).equals(request.content());
+        if (request.version() != ticket.getVersion()) {
+            // A lost response can be retried safely without classifying the same content again.
+            if (unchanged) {
+                return mapper.view(ticket);
+            }
+            throw new KnowledgeException(
+                    409,
+                    "TICKET_EDIT_CONFLICT",
+                    "This ticket has changed since you opened it. Your edits are still here. Open"
+                            + " the latest ticket in another tab to compare before editing again.");
+        }
+        if (unchanged) {
+            return mapper.view(ticket);
+        }
+        ticket.setContent(json.writeValueAsString(request.content()));
+        ticket.setVersion(ticket.getVersion() + 1);
+        reclassify(ticket);
+        return mapper.view(tickets.save(ticket));
+    }
+
+    private TicketEntity editableTicket(Long id, Long workspaceId, Long accountId) {
+        var ticket =
+                tickets.findForUpdate(id, workspaceId)
+                        .orElseThrow(
+                                () ->
+                                        new KnowledgeException(
+                                                404,
+                                                "TICKET_NOT_FOUND",
+                                                "This ticket is unavailable in your workspace."));
+        if (!ticket.getAuthorId().equals(accountId)) {
+            throw new KnowledgeException(
+                    403, "TICKET_EDIT_FORBIDDEN", "Only the creator can edit this ticket.");
+        }
+        return ticket;
+    }
+
+    private void reclassify(TicketEntity ticket) {
+        ticket.setClassificationVersion(null);
+        ticket.setClassificationStatus("PENDING");
+        ticket.setAttributes("[]");
+        ticket.setAttempts(0);
+        ticket.setNextAttemptAt(clock.instant());
+        ticket.setLeaseToken(null);
+        ticket.setLeaseUntil(null);
     }
 
     @Override

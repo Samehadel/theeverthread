@@ -42,6 +42,15 @@ public class KnowledgeController {
         return knowledge.attributes(principal.getName(), workspaceId);
     }
 
+    @PutMapping("/{id}")
+    public TicketView update(
+            Principal principal,
+            @RequestHeader("X-Workspace-Id") Long workspaceId,
+            @PathVariable Long id,
+            @RequestBody UpdateTicketRequest request) {
+        return knowledge.update(principal.getName(), workspaceId, id, request);
+    }
+
     @GetMapping("/{id}")
     public TicketView get(
             Principal principal,

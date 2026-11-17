@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslocoDirective } from '@jsverse/transloco';
 import { TranslocoService } from '@jsverse/transloco';
 import { KnowledgeStore } from './knowledge.store';
@@ -46,6 +46,15 @@ import { DetailsEditor } from './details-editor';
 })
 export class CapturePage {
   readonly auth = inject(AuthStore);
+  readonly editId =
+    inject(ActivatedRoute, { optional: true })?.snapshot.paramMap.get('id') ??
+    null;
+  readonly initialized = signal(false);
+  readonly editForbidden = signal(false);
+  private editVersion = 0;
+  readonly cancelLink = this.editId
+    ? ['/knowledge/tickets', this.editId]
+    : ['/workspace'];
   readonly store = inject(KnowledgeStore);
   private readonly originAccountId = this.auth.account()?.id;
   private readonly originWorkspaceId = this.auth.account()?.workspaceId;
@@ -71,18 +80,39 @@ export class CapturePage {
   readonly length = computed(() => detailsLength(this.content().details));
   readonly valid = computed(() => validContent(this.content()));
   readonly locked = computed(
-    () => this.store.busy() || this.store.refining() || this.store.uncertain(),
+    () =>
+      this.store.busy() ||
+      this.store.refining() ||
+      this.store.uncertain() ||
+      this.workspaceChanged() ||
+      (!!this.editId && !this.initialized()),
   );
   private readonly router = inject(Router);
   private readonly translation = inject(TranslocoService);
   private readonly submissionId = crypto.randomUUID();
   constructor() {
+    if (this.editId) this.store.load(this.editId);
     effect(() => {
       const ticket = this.store.ticket();
-      if (!ticket) return;
+      if (!ticket || this.workspaceChanged()) return;
+      if (this.editId && !this.store.saved()) {
+        if (ticket.authorId !== this.originAccountId) {
+          this.editForbidden.set(true);
+          return;
+        }
+        if (!this.initialized()) {
+          this.content.set({
+            ...ticket.content,
+            details: ticket.content.details.map((block) => ({ ...block })),
+          });
+          this.editVersion = ticket.version;
+          this.initialized.set(true);
+        }
+        return;
+      }
       this.dirty.set(false);
       void this.router.navigate(['/knowledge/tickets', ticket.id], {
-        state: { created: true },
+        state: { created: !this.editId, updated: !!this.editId },
       });
     });
   }
@@ -145,13 +175,25 @@ export class CapturePage {
       !this.workspaceChanged() &&
       this.valid() &&
       !this.store.busy() &&
-      !this.store.refining()
-    )
+      !this.store.refining() &&
+      (!this.editId || this.initialized()) &&
+      !this.editForbidden()
+    ) {
+      if (this.editId) {
+        this.store.update({
+          id: this.editId,
+          version: this.editVersion,
+          content: this.content(),
+          workspaceId: this.originWorkspaceId!,
+        });
+        return;
+      }
       this.store.publish({
         id: this.submissionId,
         content: this.content(),
         workspaceId: this.originWorkspaceId!,
       });
+    }
   }
   canLeave() {
     return (
