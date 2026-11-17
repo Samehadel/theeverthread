@@ -15,7 +15,9 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    networks: [telemetry]
+    # Cross-host scrapes need an outbound route; publish no Prometheus port.
+    networks: [default, telemetry]
+    secrets: [monitoring_ca, prometheus_certificate, prometheus_key]
     healthcheck:
       test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:9090/-/ready']
       interval: 15s
@@ -91,6 +93,12 @@ services:
     logging: *logging
 
 secrets:
+  monitoring_ca:
+    file: ./runtime/pki/prometheus/ca.pem
+  prometheus_certificate:
+    file: ./runtime/pki/prometheus/cert.pem
+  prometheus_key:
+    file: ./runtime/pki/prometheus/key.pem
   grafana_password:
     file: ./runtime/grafana_password
 

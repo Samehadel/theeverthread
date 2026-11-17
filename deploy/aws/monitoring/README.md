@@ -11,6 +11,10 @@ query Prometheus and Loki. Monitoring runs on a separate EC2. Cross-host telemet
 will use mTLS. Step 2 starts only Grafana and Prometheus; cross-host collection
 and the remaining services will be added in subsequent steps.
 
+This is an incremental runbook. The current Compose version includes the app
+server mTLS scrape: a fresh install must generate the Step 5a identities before
+starting the monitoring Compose stack, even if reading from Step 2.
+
 ## Step 1: prepare the monitoring host
 
 Target: dedicated Ubuntu 24.04 EC2, approximately 2 GiB RAM and 50 GiB encrypted
@@ -261,3 +265,91 @@ files; inspect errors rather than deleting or silently replacing trust.
 
 This checkpoint creates and verifies credentials only. No new ports are opened,
 services started, or application containers changed.
+
+## Step 5b: start application Node Exporter
+
+After transferring `runtime/pki/app-node/{ca,cert,key}.pem` to the application
+EC2's `~/monitoring/` directory, copy only `app-node.compose.yaml` and
+`node-web.yml` from this directory into that directory on the application host.
+Do not transfer monitoring's CA private key or Prometheus client key.
+
+On **application EC2**:
+
+```bash
+cd ~/monitoring
+chmod 700 runtime runtime/pki runtime/pki/app-node
+chmod 444 runtime/pki/app-node/*.pem
+sudo docker compose -f app-node.compose.yaml config --quiet
+sudo docker compose -f app-node.compose.yaml up -d
+sudo docker compose -f app-node.compose.yaml ps
+sudo docker compose -f app-node.compose.yaml logs --tail 30 app-node
+```
+
+`app-node.compose.yaml` is a separate project from both monitoring and the
+application deployment. Always pass its `-f` argument on the app host. It does
+not recreate backend/frontend containers. Docker host networking and the host
+PID namespace give the exporter access to host network/process measurements;
+read-only `/proc`, `/sys`, and root mounts provide CPU, memory and filesystem
+measurements. Capabilities are dropped and memory is limited to 96 MiB.
+
+The listener is exactly `172.31.45.83:9100`, not the public interface. There is
+no Docker bridge port forwarding. The app security group must allow TCP 9100
+only from the monitoring security group. Outbound access from monitoring must
+also permit the connection.
+
+`node-web.yml` requires TLS 1.2 or newer and a client certificate signed by the
+monitoring CA. The server uses its own certificate/key. HTTPS without a client
+certificate is rejected; this is intentional. No healthcheck is configured
+because a normal unauthenticated HTTP check cannot authenticate. Process `Up`
+is not proof of successful metric collection.
+
+## Step 5c: connect monitoring Prometheus
+
+Copy the updated tracked configuration to monitoring using the Step 2 rsync
+command, excluding `runtime/` so existing credentials are preserved. Confirm
+`runtime/pki/prometheus/{ca,cert,key}.pem` still exists there. Then on monitoring:
+
+```bash
+cd ~/monitoring
+sudo docker compose config --quiet
+sudo docker compose up -d --no-deps --force-recreate --wait prometheus
+```
+
+Recreation is required to add its certificate mounts and outbound network. It
+preserves the metrics volume. Prometheus now joins the default Docker network
+for outbound private-IP access as well as internal `telemetry`; it still has no
+published host port. `prometheus.yml` defines the HTTPS `application-server` job
+with the CA, client certificate and key. Server certificate/IP verification is
+enabled. Never set `insecure_skip_verify` to bypass errors.
+
+From monitoring, test the actual connection before relying on the dashboard:
+
+```bash
+curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+  --cacert runtime/pki/prometheus/ca.pem \
+  --cert runtime/pki/prometheus/cert.pem \
+  --key runtime/pki/prometheus/key.pem \
+  https://172.31.45.83:9100/metrics -o /tmp/app-node-metrics.txt
+head -n 5 /tmp/app-node-metrics.txt
+```
+
+Repeat without `--cert` and `--key`: TLS must fail. A timeout indicates a
+connectivity/listener issue; an explicit certificate error indicates trust,
+expiry, IP matching or missing identity. Do not open access to the internet to
+work around either failure.
+
+After 30–60 seconds, Grafana Explore should return `1` for:
+
+```promql
+up{job="application-server"}
+```
+
+Verify host memory and root disk too:
+
+```promql
+node_memory_MemTotal_bytes{job="application-server"} / 1024 / 1024 / 1024
+node_filesystem_avail_bytes{job="application-server",mountpoint="/",fstype!="rootfs"} / 1024 / 1024 / 1024
+```
+
+Compare to `free -h` and `df -h /` on the application EC2. Application JVM/HTTP
+metrics and log delivery are separate upcoming steps.

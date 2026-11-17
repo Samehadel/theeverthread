@@ -1,0 +1,38 @@
+# Standalone collectors project on the application EC2; separate from app releases.
+name: theeverthread-app-collectors
+services:
+  app-node:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - --web.listen-address=172.31.45.83:9100
+      - --web.config.file=/etc/node-exporter/web.yml
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)'
+    volumes:
+      - ./node-web.yml:/etc/node-exporter/web.yml:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    secrets: [node_certificate, node_key, monitoring_ca]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    environment:
+      GOMEMLIMIT: 64MiB
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+secrets:
+  node_certificate:
+    file: ./runtime/pki/app-node/cert.pem
+  node_key:
+    file: ./runtime/pki/app-node/key.pem
+  monitoring_ca:
+    file: ./runtime/pki/app-node/ca.pem

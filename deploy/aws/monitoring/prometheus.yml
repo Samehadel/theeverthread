@@ -2,8 +2,19 @@ global:
   scrape_interval: 30s
   evaluation_interval: 30s
 
-# Cross-host application targets will be added after mTLS setup.
+# Spring application metrics will be connected in a later step.
 scrape_configs:
+  - job_name: application-server
+    scheme: https
+    tls_config:
+      ca_file: /run/secrets/monitoring_ca
+      cert_file: /run/secrets/prometheus_certificate
+      key_file: /run/secrets/prometheus_key
+      min_version: TLS12
+    static_configs:
+      - targets: ['172.31.45.83:9100']
+        labels:
+          host: application
   - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
