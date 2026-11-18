@@ -133,9 +133,10 @@ class DatabaseInitializationTests {
                             + " 'linkedin', 'subject')");
             statement.execute(
                     "INSERT INTO KNOWLEDGE_TICKET(AUTHOR_ID, WORKSPACE_ID, AUTHOR_NAME,"
-                            + " SUBMISSION_ID, CONTENT, CREATED_AT, CLASSIFICATION_STATUS,"
-                            + " NEXT_ATTEMPT_AT) VALUES (1, 1, 'First', gen_random_uuid(), '{}',"
-                            + " CURRENT_TIMESTAMP, 'PENDING', CURRENT_TIMESTAMP)");
+                        + " SUBMISSION_ID, CONTENT, SUBMISSION_CONTENT, CREATED_AT,"
+                        + " CLASSIFICATION_STATUS, NEXT_ATTEMPT_AT) VALUES (1, 1, 'First',"
+                        + " gen_random_uuid(), '{}', '{}', CURRENT_TIMESTAMP, 'PENDING',"
+                        + " CURRENT_TIMESTAMP)");
             statement.execute(
                     "INSERT INTO TEAM_INVITATION(WORKSPACE_ID, EMAIL, ADMINISTRATOR_NAME,"
                             + " ADMINISTRATOR_ID, STATUS, EXPIRES_AT, ATTEMPTED_AT) VALUES (1,"
@@ -205,10 +206,10 @@ class DatabaseInitializationTests {
             try {
                 statement.execute(
                         "CREATE TABLE KNOWLEDGE_TICKET (ATTRIBUTES TEXT, CLASSIFICATION_VERSION"
-                            + " VARCHAR(40))");
+                                + " VARCHAR(40))");
                 statement.execute(
                         "INSERT INTO KNOWLEDGE_TICKET VALUES ('[\"area:backend\"]',"
-                            + " 'life-work-v2')");
+                                + " 'life-work-v2')");
                 apply(statement, "knowledge/20261027-001-attribute-catalog.sql");
                 assertThat(scalar(statement, "SELECT ATTRIBUTES FROM KNOWLEDGE_TICKET"))
                         .isEqualTo("[\"area:backend\"]");
@@ -223,10 +224,32 @@ class DatabaseInitializationTests {
                                 scalar(
                                         statement,
                                         "SELECT DISPLAY_LABEL FROM KNOWLEDGE_ATTRIBUTE WHERE"
-                                            + " ID='area:family'"))
+                                                + " ID='area:family'"))
                         .isEqualTo("Family");
             } finally {
                 statement.execute("SET search_path TO public; DROP SCHEMA catalog_upgrade CASCADE");
+            }
+        }
+    }
+
+    @Test
+    void ticketEditingMigrationPreservesOriginalPublicationAndExistingContent() throws Exception {
+        try (var connection = connection();
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA editing_upgrade; SET search_path TO editing_upgrade");
+            try {
+                statement.execute("CREATE TABLE KNOWLEDGE_TICKET (CONTENT TEXT NOT NULL)");
+                statement.execute("INSERT INTO KNOWLEDGE_TICKET VALUES ('original publication')");
+                apply(statement, "knowledge/20261117-001-ticket-editing.sql");
+                assertThat(scalar(statement, "SELECT VERSION FROM KNOWLEDGE_TICKET"))
+                        .isEqualTo("0");
+                assertThat(scalar(statement, "SELECT SUBMISSION_CONTENT FROM KNOWLEDGE_TICKET"))
+                        .isEqualTo("original publication");
+                statement.execute("UPDATE KNOWLEDGE_TICKET SET CONTENT='edited publication'");
+                assertThat(scalar(statement, "SELECT SUBMISSION_CONTENT FROM KNOWLEDGE_TICKET"))
+                        .isEqualTo("original publication");
+            } finally {
+                statement.execute("SET search_path TO public; DROP SCHEMA editing_upgrade CASCADE");
             }
         }
     }

@@ -12,6 +12,8 @@ public interface KnowledgeService {
     TicketPage browse(
             String email, Long workspaceId, String detailsType, Integer limit, String cursor);
 
+    TicketView update(String email, Long workspaceId, Long id, UpdateTicketRequest request);
+
     TicketView get(String email, Long workspaceId, Long id);
 
     RefinementView refine(String email, Long workspaceId, RefinementRequest request);

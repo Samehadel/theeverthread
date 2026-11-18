@@ -34,6 +34,13 @@ export const routes: Routes = [
       import('./knowledge/capture-page').then((m) => m.CapturePage),
   },
   {
+    path: 'knowledge/tickets/:id/edit',
+    canActivate: [knowledgeAccess],
+    canDeactivate: [unsavedCapture],
+    loadComponent: () =>
+      import('./knowledge/capture-page').then((m) => m.CapturePage),
+  },
+  {
     path: 'knowledge/tickets/:id',
     canActivate: [knowledgeAccess],
     loadComponent: () =>

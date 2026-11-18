@@ -11,5 +11,6 @@ public record TicketView(
         @JsonFormat(shape = JsonFormat.Shape.STRING) Long authorId,
         String authorName,
         Instant createdAt,
+        long version,
         String classificationStatus,
         List<String> attributes) {}

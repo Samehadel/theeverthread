@@ -18,6 +18,7 @@ export interface Ticket {
   authorId: string;
   authorName: string;
   createdAt: string;
+  version: number;
   classificationStatus: string;
   attributes: string[];
 }
