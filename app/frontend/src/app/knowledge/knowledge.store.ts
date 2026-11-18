@@ -14,6 +14,7 @@ export const KnowledgeStore = signalStore(
   withState({
     ticket: null as Ticket | null,
     suggestion: null as Refinement | null,
+    saved: false,
     busy: false,
     uncertain: false,
     refining: false,
@@ -42,6 +43,39 @@ export const KnowledgeStore = signalStore(
                 uncertain:
                   !e?.status || e.status >= 500 || e.name === 'TimeoutError',
                 error: message(e),
+              });
+              return EMPTY;
+            }),
+          );
+        }),
+      ),
+    );
+    const update = rxMethod<{
+      id: string;
+      version: number;
+      content: TicketContent;
+      workspaceId: string;
+    }>(
+      pipe(
+        exhaustMap(({ id, version, content, workspaceId }) => {
+          patchState(store, { busy: true, error: '', saved: false });
+          return api.update(id, version, content, workspaceId).pipe(
+            tap((ticket) =>
+              patchState(store, {
+                ticket,
+                busy: false,
+                uncertain: false,
+                saved: true,
+              }),
+            ),
+            catchError((error) => {
+              patchState(store, {
+                busy: false,
+                uncertain:
+                  !error?.status ||
+                  error.status >= 500 ||
+                  error.name === 'TimeoutError',
+                error: message(error),
               });
               return EMPTY;
             }),
@@ -102,6 +136,7 @@ export const KnowledgeStore = signalStore(
     );
     return {
       publish,
+      update,
       refine,
       load,
       discard: () =>

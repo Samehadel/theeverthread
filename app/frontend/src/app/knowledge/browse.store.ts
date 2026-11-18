@@ -112,15 +112,29 @@ export const BrowseStore = signalStore(
       updateTicket(ticket: Ticket) {
         ensureSession();
         patchState(store, {
-          items: store.items().map((item) =>
-            item.id === ticket.id
-              ? {
-                  ...item,
-                  classificationStatus: ticket.classificationStatus,
-                  attributes: ticket.attributes,
-                }
-              : item,
-          ),
+          items: store
+            .items()
+            .filter(
+              (item) =>
+                item.id !== ticket.id ||
+                !store.detailsType() ||
+                store.detailsType() === ticket.content.template,
+            )
+            .map((item) =>
+              item.id === ticket.id
+                ? {
+                    ...item,
+                    title: ticket.content.title,
+                    capturePreview:
+                      ticket.content.capture == null
+                        ? null
+                        : [...ticket.content.capture].slice(0, 280).join(''),
+                    detailsType: ticket.content.template,
+                    classificationStatus: ticket.classificationStatus,
+                    attributes: ticket.attributes,
+                  }
+                : item,
+            ),
         });
       },
     };

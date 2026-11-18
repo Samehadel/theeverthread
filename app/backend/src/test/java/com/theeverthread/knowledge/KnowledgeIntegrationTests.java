@@ -18,12 +18,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -46,22 +49,18 @@ class KnowledgeIntegrationTests {
         registry.add("spring.datasource.password", database::getPassword);
     }
 
-    @Autowired
-    KnowledgeService knowledge;
-    @Autowired
-    ClassificationWorker worker;
-    @Autowired
-    ClassificationTransactions transactions;
-    @Autowired
-    JdbcTemplate jdbc;
-    @Autowired
-    AttributeCatalog catalog;
-    @Autowired
-    MockMvc mvc;
-    @Autowired
-    JsonMapper json;
+    @Autowired KnowledgeService knowledge;
+    @Autowired ClassificationWorker worker;
+    @Autowired ClassificationTransactions transactions;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired AttributeCatalog catalog;
+    @Autowired MockMvc mvc;
+    @Autowired JsonMapper json;
     @MockitoBean
     KnowledgeAi ai;
+
+    @MockitoSpyBean
+    Clock clock;
     Long workspace;
     Long author;
 
@@ -111,6 +110,225 @@ class KnowledgeIntegrationTests {
 
     CreateTicketRequest request() {
         return new CreateTicketRequest(UUID.randomUUID(), content());
+    }
+
+    TicketContent editedContent(String title) {
+        return new TicketContent(
+                title,
+                "Updated capture",
+                "Knowledge",
+                List.of(new TicketContent.DetailBlock("paragraph", "Updated details", null, null)));
+    }
+
+    @Test
+    void creatorEditsThroughHttpAndPublicationRetriesKeepTheirOriginalMeaning() throws Exception {
+        // Exercise clocks finer than PostgreSQL's microsecond timestamp precision on every OS.
+        doReturn(Instant.parse("2026-11-17T12:00:00.123456789Z")).when(clock).instant();
+        var original = request();
+        var created = knowledge.create("member@example.com", workspace, original);
+        // Compare durable timestamps so database precision does not look like an edit.
+        var published = knowledge.get("member@example.com", workspace, created.id());
+        mvc.perform(
+                        put("/api/knowledge/tickets/" + created.id())
+                                .with(user("member@example.com"))
+                                .with(csrf())
+                                .header("X-Workspace-Id", workspace)
+                                .contentType("application/json")
+                                .content(
+                                        json.writeValueAsString(
+                                                new UpdateTicketRequest(
+                                                        0L, editedContent("Updated title")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.version").value(1))
+                .andExpect(jsonPath("$.data.content.title").value("Updated title"));
+        var saved = knowledge.get("member@example.com", workspace, created.id());
+        assertThat(saved.authorId()).isEqualTo(created.authorId());
+        assertThat(saved.createdAt()).isEqualTo(published.createdAt());
+        assertThat(saved.content()).isEqualTo(editedContent("Updated title"));
+        assertThat(knowledge.create("member@example.com", workspace, original)).isEqualTo(saved);
+        assertThatThrownBy(
+                        () ->
+                                knowledge.create(
+                                        "member@example.com",
+                                        workspace,
+                                        new CreateTicketRequest(
+                                                original.submissionId(), saved.content())))
+                .isInstanceOfSatisfying(
+                        KnowledgeException.class, e -> assertThat(e.status()).isEqualTo(409));
+        assertThat(knowledge.browse("admin@example.com", workspace, "Knowledge", 20, null).items())
+                .singleElement()
+                .satisfies(row -> assertThat(row.title()).isEqualTo("Updated title"));
+    }
+
+    @Test
+    void editEnforcesCreatorWorkspaceMembershipCsrfAndAuthentication() throws Exception {
+        var created = knowledge.create("member@example.com", workspace, request());
+        var update = new UpdateTicketRequest(0L, editedContent("Unauthorized edit"));
+        var path = "/api/knowledge/tickets/" + created.id();
+        mvc.perform(
+                        put(path)
+                                .with(user("admin@example.com"))
+                                .with(csrf())
+                                .header("X-Workspace-Id", workspace)
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(update)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("TICKET_EDIT_FORBIDDEN"));
+        mvc.perform(
+                        put(path)
+                                .with(user("outsider@example.com"))
+                                .with(csrf())
+                                .header("X-Workspace-Id", workspaceFor("outsider@example.com"))
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(update)))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        put(path)
+                                .with(user("member@example.com"))
+                                .header("X-Workspace-Id", workspace)
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(update)))
+                .andExpect(status().isForbidden());
+        mvc.perform(
+                        put(path)
+                                .with(csrf())
+                                .header("X-Workspace-Id", workspace)
+                                .contentType("application/json")
+                                .content(json.writeValueAsString(update)))
+                .andExpect(status().isUnauthorized());
+        jdbc.update("DELETE FROM WORKSPACE_MEMBERSHIP WHERE ACCOUNT_ID=?", author);
+        assertThatThrownBy(
+                        () ->
+                                knowledge.update(
+                                        "member@example.com", workspace, created.id(), update))
+                .hasMessageContaining("access to this workspace");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT VERSION FROM KNOWLEDGE_TICKET WHERE ID=?",
+                                Long.class,
+                                created.id()))
+                .isZero();
+    }
+
+    @Test
+    void editRejectsInvalidContentAndStaleVersionsWithoutLosingSavedContent() {
+        var created = knowledge.create("member@example.com", workspace, request());
+        assertThatThrownBy(
+                        () ->
+                                knowledge.update(
+                                        "member@example.com",
+                                        workspace,
+                                        created.id(),
+                                        new UpdateTicketRequest(null, editedContent("Updated"))))
+                .isInstanceOf(KnowledgeException.class);
+        assertThatThrownBy(
+                        () ->
+                                knowledge.update(
+                                        "member@example.com",
+                                        workspace,
+                                        created.id(),
+                                        new UpdateTicketRequest(0L, editedContent(""))))
+                .isInstanceOf(KnowledgeException.class);
+        var saved =
+                knowledge.update(
+                        "member@example.com",
+                        workspace,
+                        created.id(),
+                        new UpdateTicketRequest(0L, editedContent("First edit")));
+        assertThatThrownBy(
+                        () ->
+                                knowledge.update(
+                                        "member@example.com",
+                                        workspace,
+                                        created.id(),
+                                        new UpdateTicketRequest(0L, editedContent("Stale edit"))))
+                .isInstanceOfSatisfying(
+                        KnowledgeException.class,
+                        e -> {
+                            assertThat(e.status()).isEqualTo(409);
+                            assertThat(e.code()).isEqualTo("TICKET_EDIT_CONFLICT");
+                        });
+        assertThat(
+                        knowledge.update(
+                                "member@example.com",
+                                workspace,
+                                created.id(),
+                                new UpdateTicketRequest(0L, saved.content())))
+                .isEqualTo(saved);
+        assertThat(knowledge.get("member@example.com", workspace, created.id())).isEqualTo(saved);
+    }
+
+    @Test
+    void editsFenceInFlightClassificationAndQueueFreshContent() {
+        var created = knowledge.create("member@example.com", workspace, request());
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                        + " second'");
+        var oldWork = transactions.claim();
+        var saved =
+                knowledge.update(
+                        "member@example.com",
+                        workspace,
+                        created.id(),
+                        new UpdateTicketRequest(0L, editedContent("Reclassified edit")));
+        transactions.complete(oldWork, List.of("area:backend"), catalog.definitions());
+        transactions.fail(oldWork);
+        var pending = knowledge.get("member@example.com", workspace, created.id());
+        assertThat(pending.version()).isEqualTo(1);
+        assertThat(pending.classificationStatus()).isEqualTo("PENDING");
+        assertThat(pending.attributes()).isEmpty();
+        jdbc.update(
+                "UPDATE KNOWLEDGE_TICKET SET NEXT_ATTEMPT_AT=CURRENT_TIMESTAMP-INTERVAL '1"
+                        + " second'");
+        var newWork = transactions.claim();
+        assertThat(newWork.content()).isEqualTo(saved.content());
+        transactions.complete(newWork, List.of("area:backend"), catalog.definitions());
+        var classified = knowledge.get("member@example.com", workspace, created.id());
+        assertThat(classified.classificationStatus()).isEqualTo("COMPLETE");
+        assertThat(classified.attributes()).containsExactly("area:backend");
+        assertThat(classified.version()).isEqualTo(1);
+        // Retrying an acknowledged or uncertain save must preserve successful classification.
+        assertThat(
+                        knowledge.update(
+                                "member@example.com",
+                                workspace,
+                                created.id(),
+                                new UpdateTicketRequest(0L, saved.content())))
+                .isEqualTo(classified);
+    }
+
+    @Test
+    void simultaneousEditsFromOneVersionAcceptExactlyOneWriter() throws Exception {
+        var created = knowledge.create("member@example.com", workspace, request());
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var futures = new ArrayList<Future<Integer>>();
+            for (var title : List.of("First tab", "Second tab")) {
+                futures.add(
+                        executor.submit(
+                                () -> {
+                                    start.await();
+                                    try {
+                                        knowledge.update(
+                                                "member@example.com",
+                                                workspace,
+                                                created.id(),
+                                                new UpdateTicketRequest(0L, editedContent(title)));
+                                        return 200;
+                                    } catch (KnowledgeException exception) {
+                                        return exception.status();
+                                    }
+                                }));
+            }
+            start.countDown();
+            assertThat(
+                            List.of(
+                                    futures.get(0).get(10, TimeUnit.SECONDS),
+                                    futures.get(1).get(10, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200, 409);
+        }
+        assertThat(knowledge.get("member@example.com", workspace, created.id()).version())
+                .isEqualTo(1);
     }
 
     @Test
