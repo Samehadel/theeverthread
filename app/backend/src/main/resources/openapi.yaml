@@ -565,22 +565,10 @@ paths:
     post:
       operationId: sendTeamInvitation
       summary: Send one team invitation as a verified workspace administrator.
-      description:
-        "Recipient membership is checked before pending invitation status. New sends
-
-        check the workspace's configured active-account cap (default 10), including
-
-        its administrator. Pending invitations reserve neither membership nor capacity.
-
-        SENDING is persisted before SMTP; SMTP_ACCEPTED is success after relay acceptance
-
-        and persistence, not guaranteed inbox delivery. FAILED remains retryable.
-
-        Repeated requests during SENDING do not submit another email. Lost responses
-
-        must be reconciled with /api/invitations/status before retrying.
-
-        "
+      description: >-
+        Validates workspace ownership, membership and active-account capacity, then
+        atomically queues one invitation email. A repeated request while queued returns
+        the same obligation. Read invitation status if the HTTP response is lost.
       security:
         - SessionCookie: []
       parameters:
@@ -589,7 +577,7 @@ paths:
         $ref: "#/components/requestBodies/InvitationEmail"
       responses:
         "200":
-          description: SMTP_ACCEPTED, FAILED, or an already SENDING attempt.
+          description: Queued invitation and its current delivery status.
           content:
             application/json:
               schema:
@@ -618,27 +606,15 @@ paths:
     get:
       operationId: listSentInvitations
       summary: All pending, failed and accepted invitations in the verified administrator's workspace.
-      description:
-        "No truncation or pagination. Ordered by COALESCE(sentAt, attemptedAt) descending,
-
-        then ID descending. Expired pending and revoked records are excluded; accepted
-
-        and failed records remain visible. sentAt is null until a confirmed SMTP submission.
-
-        resendAvailableAt is the latest send/attempt plus 60 seconds. resending indicates
-
-        a reserved replacement; deliveryFailed describes a failed delivery attempt without
-
-        changing the current link status. No tokens are exposed.
-
-        "
+      description: >-
+        Returns the full list with recent records first. Invitation acceptance and email
+        delivery have independent statuses. sentAt is the last confirmed successful send
+        or a historical relay acceptance. expiresAt reflects the usable link, if one exists.
       security:
         - SessionCookie: []
       responses:
         "200":
-          description:
-            Envelope containing an array of invitation views (id, email, status, expiresAt, message,
-            sentAt, resendAvailableAt, resending, deliveryFailed).
+          description: Invitation records with the latest email's delivery status and reference.
         "401":
           description: Authentication required.
         "403":
@@ -688,28 +664,11 @@ paths:
     post:
       operationId: resendInvitation
       summary: Replace an eligible invitation after a 60-second cooldown.
-      description:
-        "Workspace isolation, recipient eligibility and active-account capacity are checked
-
-        under the same recipient/workspace locks as acceptance. Only FAILED or unexpired
-
-        SMTP_ACCEPTED invitations are eligible. Reserve a replacement hash separately and
-
-        send outside the transaction. Confirmed submission promotes the replacement with
-
-        a fresh seven-day expiry, invalidating the old hash. Failure or SMTP timeout discards
-
-        the replacement and preserves the old link/expiry; an ambiguously delivered replacement
-
-        is unusable. Acceptance during delivery wins and completion never reopens it.
-
-        Persistence failure after SMTP leaves a reserved replacement, blocking duplicate
-
-        retries while keeping the old link usable; operational reconciliation is required.
-
-        A lost HTTP response must be reconciled by reloading the sent list before retrying.
-
-        "
+      description: >-
+        Queues a new email for an eligible invitation after a 60-second cooldown. A
+        confirmed replacement starts a new seven-day expiry. A failed replacement
+        preserves the previous usable link and expiry. Email events never reopen an
+        accepted invitation.
       security:
         - SessionCookie: []
       parameters:
@@ -722,9 +681,9 @@ paths:
         - $ref: "#/components/parameters/InvitationCsrf"
       responses:
         "200":
-          description:
-            Current invitation view and result message. deliveryFailed=true means no replacement promotion;
-            ACCEPTED means acceptance won the race.
+          description: Invitation view with the queued replacement delivery status.
+        "429":
+          description: RESEND_COOLDOWN. Retry after the reported cooldown.
         "401":
           description: Authentication required.
         "403":
@@ -733,7 +692,7 @@ paths:
           description: Invitation absent or belongs to another workspace.
         "409":
           description:
-            RESEND_COOLDOWN, RESEND_IN_PROGRESS, INVITATION_UNUSABLE, ALREADY_MEMBER or ACCOUNT_LIMIT.
+            RESEND_IN_PROGRESS, INVITATION_UNUSABLE, ALREADY_MEMBER or ACCOUNT_LIMIT.
             Existing invitation unchanged.
         "500":
           description: Uncertain persistence outcome; reload list before retry.
@@ -800,6 +759,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/webhooks/resend:
+    post:
+      operationId: recordResendDeliveryEvent
+      summary: Receive signed Resend delivery updates.
+      description: Resend signs the raw request with the configured webhook secret.
+      security: []
+      parameters:
+        - in: header
+          name: svix-id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Event acknowledged.
+        "400":
+          description: Invalid signature or tracked event payload.
+        "413":
+          description: Payload exceeds the accepted size.
   /api/registration:
     post:
       operationId: registerAccount
@@ -833,8 +823,8 @@ paths:
     post:
       operationId: resendVerification
       summary:
-        Queue a replacement using the same email row. Coalesce pending or retrying requests. The worker retries
-        failures and rotates the token only after SMTP acceptance.
+        Queue a replacement email, coalescing requests while submission is queued or retrying.
+        Confirmed delivery replaces the previous link.
       security: []
       responses:
         "200":
@@ -930,7 +920,7 @@ paths:
                   maxLength: 254
       responses:
         "200":
-          description: Current status; SMTP_ACCEPTED does not mean inbox delivery.
+          description: Latest verification email status and support reference.
           content:
             application/json:
               schema:
@@ -1349,6 +1339,8 @@ components:
             - status
             - expiresAt
             - message
+            - deliveryStatus
+            - resendEligible
           properties:
             id:
               type: string
@@ -1359,13 +1351,13 @@ components:
             status:
               type: string
               enum:
-                - SENDING
-                - SMTP_ACCEPTED
+                - PENDING
+                - READY
                 - FAILED
                 - REVOKED
                 - ACCEPTED
             expiresAt:
-              type: string
+              type: [string, "null"]
               format: date-time
             message:
               type: string
@@ -1383,6 +1375,13 @@ components:
               type: boolean
             deliveryFailed:
               type: boolean
+            deliveryStatus:
+              $ref: "#/components/schemas/EmailDeliveryStatus"
+            resendEligible:
+              type: boolean
+            emailReference:
+              type: [string, "null"]
+              pattern: '^[1-9][0-9]{0,18}$'
     ErrorEnvelope:
       type: object
       required:
@@ -1415,13 +1414,13 @@ components:
           type: string
           format: date-time
         deliveryStatus:
-          type: string
-          enum:
-            - PENDING
-            - SENDING
-            - SMTP_ACCEPTED
-            - FAILED
-            - CANCELLED
+          $ref: "#/components/schemas/EmailDeliveryStatus"
+        emailReference:
+          type: [string, "null"]
+          pattern: '^[1-9][0-9]{0,18}$'
+    EmailDeliveryStatus:
+      type: string
+      enum: [PENDING, PROVIDER_ACCEPTED, DELIVERED, FAILED, UNKNOWN, CANCELLED]
     Verification:
       type: object
       required:

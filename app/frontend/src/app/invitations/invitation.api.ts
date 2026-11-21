@@ -5,7 +5,16 @@ export interface Invitation {
   id: string;
   email: string;
   status: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  deliveryStatus:
+    | 'PENDING'
+    | 'PROVIDER_ACCEPTED'
+    | 'DELIVERED'
+    | 'FAILED'
+    | 'UNKNOWN'
+    | 'CANCELLED';
+  resendEligible: boolean;
+  emailReference?: string | null;
   message: string;
   sentAt?: string | null;
   resendAvailableAt?: string | null;

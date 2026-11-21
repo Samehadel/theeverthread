@@ -18,7 +18,9 @@ describe('Invitation flow', () => {
   const accepted: Invitation = {
     id: 'id',
     email: 'colleague@gmail.com',
-    status: 'SMTP_ACCEPTED',
+    status: 'READY',
+    deliveryStatus: 'DELIVERED',
+    resendEligible: true,
     expiresAt: '2026-10-14T08:00:00Z',
     message: 'Invitation sent.',
   };
@@ -46,7 +48,8 @@ describe('Invitation flow', () => {
     store.send(1);
     response.next({
       ...accepted,
-      status: 'FAILED',
+      status: 'PENDING',
+      deliveryStatus: 'FAILED',
       message: 'Delivery failed.',
     });
     response.complete();

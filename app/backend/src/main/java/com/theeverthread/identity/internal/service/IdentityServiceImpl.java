@@ -24,6 +24,8 @@ public class IdentityServiceImpl implements IdentityService {
     private final AccountRepository accounts;
     private final VerificationEmailRepository emails;
     private final RegistrationLocks locks;
+    private final OutboundEmailRepository outboundEmails;
+    private final EmailOutbox outbox;
     private final PasswordEncoder passwords;
     private final WorkspaceAccess workspaces;
     private final Clock clock;
@@ -67,7 +69,7 @@ public class IdentityServiceImpl implements IdentityService {
         delivery.setAccountId(account.getId());
         delivery.setRecipient(email);
         delivery.setStatus(EmailDeliveryStatus.PENDING);
-        delivery.setNextAttemptAt(clock.instant());
+        delivery.setLatestEmailId(outbox.verification(account.getId(), email));
         emails.save(delivery);
         return pending(account);
     }
@@ -97,29 +99,54 @@ public class IdentityServiceImpl implements IdentityService {
         if (account.getStatus() == AccountStatus.ACTIVE) throw emailInUse();
         var delivery =
                 emails.findById(account.getId()).orElseThrow(IdentityServiceImpl::invalidLink);
-        if (delivery.getLastSentAt() != null
-                && clock.instant().isBefore(delivery.getLastSentAt().plusSeconds(60)))
+        var latest = latest(delivery);
+        if (latest != null && latest.getStatus() == OutboundEmail.Status.PENDING) {
+            return pending(account, delivery, latest);
+        }
+        if (clock.instant().isBefore(resendAvailableAt(delivery, latest))) {
             throw new IdentityException(
                     429,
                     "RESEND_COOLDOWN",
                     "Wait 60 seconds after the previous email before requesting another.");
-        if (delivery.getStatus() == EmailDeliveryStatus.SMTP_ACCEPTED) {
-            delivery.setStatus(EmailDeliveryStatus.PENDING);
-            delivery.setNextAttemptAt(clock.instant());
-            account.setUpdatedAt(clock.instant());
         }
+        delivery.setLatestEmailId(outbox.verification(account.getId(), email));
+        delivery.setNextAttemptAt(null);
+        account.setUpdatedAt(clock.instant());
         return pending(account);
+    }
+
+    private OutboundEmail latest(VerificationEmailEntity verification) {
+        return verification.getLatestEmailId() == null
+                ? null
+                : outboundEmails.findById(verification.getLatestEmailId()).orElseThrow();
+    }
+
+    private Instant resendAvailableAt(VerificationEmailEntity verification, OutboundEmail latest) {
+        Instant when = verification.getLastSentAt();
+        if (latest != null) {
+            when = later(when, latest.getCreatedAt());
+            when = later(when, latest.getAcceptedAt());
+        }
+        return when == null ? clock.instant() : when.plusSeconds(60);
+    }
+
+    static Instant later(Instant first, Instant second) {
+        return first == null || (second != null && second.isAfter(first)) ? second : first;
     }
 
     private PendingView pending(AccountEntity account) {
         var delivery =
                 emails.findById(account.getId()).orElseThrow(IdentityServiceImpl::invalidLink);
+        return pending(account, delivery, latest(delivery));
+    }
+
+    private PendingView pending(
+            AccountEntity account, VerificationEmailEntity delivery, OutboundEmail latest) {
         return new PendingView(
                 account.getEmail(),
-                delivery.getLastSentAt() == null
-                        ? clock.instant()
-                        : delivery.getLastSentAt().plusSeconds(60),
-                delivery.getStatus().name());
+                resendAvailableAt(delivery, latest),
+                latest == null ? delivery.getStatus().name() : latest.getStatus().name(),
+                delivery.getLatestEmailId());
     }
 
     @Override
@@ -137,20 +164,44 @@ public class IdentityServiceImpl implements IdentityService {
         locks.lock("email:" + email);
         var account = accounts.findById(id).orElseThrow(IdentityServiceImpl::invalidLink);
         var delivery = emails.findById(id).orElseThrow(IdentityServiceImpl::invalidLink);
-        if (token == null
-                || !token.matches("[A-Za-z0-9_-]{43}")
-                || delivery.getTokenHash() == null
-                || !MessageDigest.isEqual(
-                        hash(token).getBytes(StandardCharsets.US_ASCII),
-                        delivery.getTokenHash().getBytes(StandardCharsets.US_ASCII)))
+        if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw invalidLink();
-        if (!clock.instant().isBefore(delivery.getTokenExpiresAt()))
+        }
+        String hash = hash(token);
+        boolean current =
+                delivery.getTokenHash() != null
+                        && MessageDigest.isEqual(
+                                hash.getBytes(StandardCharsets.US_ASCII),
+                                delivery.getTokenHash().getBytes(StandardCharsets.US_ASCII));
+        var candidate =
+                current || account.isActive()
+                        ? null
+                        : outboundEmails
+                                .findByTokenHash(hash)
+                                .filter(emailMessage -> id.equals(emailMessage.getAccountId()))
+                                .orElse(null);
+        Instant expiry =
+                current
+                        ? delivery.getTokenExpiresAt()
+                        : candidate == null
+                                ? null
+                                : candidate.provisionalExpiry(delivery.getLastSentAt());
+        if (expiry == null) {
+            throw invalidLink();
+        }
+        if (!clock.instant().isBefore(expiry)) {
             throw new IdentityException(
                     400,
                     "EXPIRED_VERIFICATION",
                     "This link has expired. Request a new verification email.");
+        }
         if (account.isActive()) return new VerificationView("ALREADY_VERIFIED", null);
         if (account.getStatus() != AccountStatus.PENDING) throw invalidLink();
+        if (!current) {
+            delivery.setTokenHash(hash);
+            delivery.setTokenExpiresAt(expiry);
+            delivery.setLastSentAt(expiry.minus(candidate.linkLifetime()));
+        }
         account.setStatus(AccountStatus.ACTIVE);
         account.setUpdatedAt(clock.instant());
         workspaces.provisionDefault(account);

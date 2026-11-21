@@ -18,6 +18,7 @@ import org.springframework.security.crypto.password.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.*;
 import org.springframework.security.web.context.*;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.csrf.*;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -92,7 +93,14 @@ class SecurityConfiguration {
         return http.sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .securityContext(context -> context.securityContextRepository(contexts))
-                .csrf(config -> config.csrfTokenRepository(csrf))
+                .csrf(
+                        config ->
+                                config.csrfTokenRepository(csrf)
+                                        .ignoringRequestMatchers(
+                                                PathPatternRequestMatcher.withDefaults()
+                                                        .matcher(
+                                                                HttpMethod.POST,
+                                                                "/api/webhooks/resend")))
                 .requestCache(cache -> cache.disable())
                 .oauth2Login(
                         oauth ->
@@ -131,6 +139,7 @@ class SecurityConfiguration {
                                         .permitAll()
                                         .requestMatchers(
                                                 HttpMethod.POST,
+                                                "/api/webhooks/resend",
                                                 "/api/registration",
                                                 "/api/registration/resend",
                                                 "/api/registration/status",

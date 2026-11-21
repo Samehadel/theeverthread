@@ -28,18 +28,6 @@ spring:
         connectTimeout: 2
       connection-timeout: 2000
       validation-timeout: 1000
-  mail:
-    host: ${SMTP_HOST:127.0.0.1}
-    port: ${SMTP_PORT:1025}
-    username: ${SMTP_USER:}
-    password: ${SMTP_PASSWORD:}
-    properties:
-      "[mail.smtp.auth]": ${SMTP_AUTH:true}
-      "[mail.smtp.starttls.enable]": ${SMTP_STARTTLS:true}
-      "[mail.smtp.starttls.required]": ${SMTP_STARTTLS:false}
-      "[mail.smtp.connectiontimeout]": 2000
-      "[mail.smtp.timeout]": 2000
-      "[mail.smtp.writetimeout]": 2000
   jpa:
     open-in-view: false
     hibernate:
@@ -92,6 +80,11 @@ theeverthread:
     refresh-lifetime: ${REFRESH_TOKEN_LIFETIME:14d}
   registration:
     public-origin: ${PUBLIC_ORIGIN:http://127.0.0.1:4200}
-    mail-from: ${MAIL_FROM:no-reply@theeverthread.local}
+  email:
+    from: ${MAIL_FROM:no-reply@theeverthread.local}
+    api-url: ${RESEND_API_URL:https://api.resend.com}
+    api-key: ${RESEND_API_KEY:}
+    webhook-secret: ${RESEND_WEBHOOK_SECRET:}
+    payload-key: ${EMAIL_PAYLOAD_KEY:}
   invitations:
     max-active-accounts: ${INVITATION_MAX_ACTIVE_ACCOUNTS:10}

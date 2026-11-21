@@ -15,7 +15,13 @@ export interface Pending {
   email: string;
   resendAvailableAt: string;
   deliveryStatus:
-    'PENDING' | 'SENDING' | 'SMTP_ACCEPTED' | 'FAILED' | 'CANCELLED';
+    | 'PENDING'
+    | 'PROVIDER_ACCEPTED'
+    | 'DELIVERED'
+    | 'FAILED'
+    | 'UNKNOWN'
+    | 'CANCELLED';
+  emailReference?: string | null;
 }
 export interface Account {
   id: string;

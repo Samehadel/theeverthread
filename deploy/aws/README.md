@@ -23,8 +23,10 @@ Deployment is disabled until the repository Actions variable
    on the server. Use a root-owned directory with mode 700 and make `deploy.sh`
    executable with mode 700. Create root-only `/opt/theeverthread/secrets.env` with a
    Neon `DB_URL` (JDBC URL with TLS), `DB_USER`, and `DB_PASSWORD`. Use the development
-   branch direct endpoint for startup Liquibase migrations. Never overwrite credentials
-   as part of deployment.
+   branch direct endpoint for startup Liquibase migrations. Configure the Resend sender,
+   API key, signing secret and email payload key in the same secret file.
+   See [Transactional email](../../app/README.md#transactional-email) for setup and
+   migration ordering. Preserve the secret file across deployments.
 3. Run `sudo docker login ghcr.io --username YOUR_GITHUB_USERNAME` on EC2,
    entering a classic GitHub personal access token with `read:packages` at the
    password prompt. Renew this credential before its expiration.

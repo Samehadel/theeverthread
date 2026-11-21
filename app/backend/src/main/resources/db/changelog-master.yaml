@@ -31,3 +31,5 @@ databaseChangeLog:
       file: db/knowledge/20261027-001-attribute-catalog.sql
   - include:
       file: db/knowledge/20261117-001-ticket-editing.sql
+  - include:
+      file: db/identity/20261121-001-email-outbox.sql

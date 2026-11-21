@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 
 /**
  * Serializes acceptance with registration, verification, invitation sends, and other acceptances.
@@ -29,6 +30,7 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
     private final WorkspaceAccess workspaces;
     private final MembershipRepository memberships;
     private final VerificationEmailRepository verificationEmails;
+    private final OutboundEmailRepository outboundEmails;
     private final RegistrationLocks locks;
     private final PasswordEncoder passwords;
     private final Validator validator;
@@ -55,7 +57,7 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
         }
         var account = registerMember(invitation, request, authenticatedEmail);
         invitation.setAcceptedAt(clock.instant());
-        invitation.setAcceptedTokenHash(invitation.getTokenHash());
+        invitation.setAcceptedTokenHash(IdentityServiceImpl.hash(request.invitation().token()));
         invitation.setTokenHash(null);
         invitation.setStatus("ACCEPTED");
         return workspaces.view(account, invitation.getWorkspace().getId());
@@ -143,11 +145,11 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
                     "INVITATION_USED",
                     "This invitation link has already been used and the account was activated.");
         }
-        if (!hash.equals(invitation.getTokenHash())) {
+        Instant expiry = expiry(invitation, hash);
+        if (expiry == null) {
             return invalid();
         }
-        if (!"SMTP_ACCEPTED".equals(invitation.getStatus())
-                || !clock.instant().isBefore(invitation.getExpiresAt())) {
+        if ("REVOKED".equals(invitation.getStatus()) || !clock.instant().isBefore(expiry)) {
             return view(
                     invitation,
                     "INVITATION_UNUSABLE",
@@ -156,6 +158,29 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
         }
         var membershipFailure = membershipFailure(invitation);
         return membershipFailure != null ? membershipFailure : checkCapacity(invitation);
+    }
+
+    private Instant expiry(InvitationEntity invitation, String hash) {
+        if (hash.equals(invitation.getTokenHash())) {
+            return invitation.getExpiresAt();
+        }
+        if (invitation.getLatestEmailId() == null || "ACCEPTED".equals(invitation.getStatus())) {
+            return null;
+        }
+        var seriesId =
+                outboundEmails
+                        .findById(invitation.getLatestEmailId())
+                        .map(OutboundEmail::getSeriesId)
+                        .orElse(null);
+        if (seriesId == null) {
+            return null;
+        }
+        return outboundEmails
+                .findByTokenHash(hash)
+                .filter(email -> invitation.getId().equals(email.getInvitationId()))
+                .filter(email -> seriesId.equals(email.getSeriesId()))
+                .map(email -> email.provisionalExpiry(invitation.getSentAt()))
+                .orElse(null);
     }
 
     private InvitationAcceptanceView membershipFailure(InvitationEntity invitation) {

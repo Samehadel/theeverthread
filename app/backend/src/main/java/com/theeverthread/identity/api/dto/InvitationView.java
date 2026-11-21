@@ -13,8 +13,9 @@ public record InvitationView(
         Instant sentAt,
         Instant resendAvailableAt,
         boolean resending,
-        boolean deliveryFailed) {
-    public InvitationView(Long id, String email, String status, Instant expiresAt, String message) {
-        this(id, email, status, expiresAt, message, null, null, false, false);
-    }
-}
+        boolean deliveryFailed,
+        String deliveryStatus,
+        boolean resendEligible,
+        @com.fasterxml.jackson.annotation.JsonFormat(
+                        shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+                Long emailReference) {}

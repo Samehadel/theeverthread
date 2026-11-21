@@ -98,9 +98,11 @@ jobs:
           set -a
           source .env
           set +a
+          node dev/resend-stub.mjs > /tmp/theeverthread-resend-stub.log 2>&1 &
+          resend_stub_pid=$!
           java -jar backend/build/libs/app.jar > /tmp/theeverthread-backend.log 2>&1 &
           backend_pid=$!
-          trap 'kill "$backend_pid" 2>/dev/null || true; docker compose down -v' EXIT
+          trap 'kill "$backend_pid" "$resend_stub_pid" 2>/dev/null || true; docker compose down -v' EXIT
           ready=0
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:8080/actuator/health/readiness; then ready=1; break; fi
@@ -117,6 +119,7 @@ jobs:
           path: |
             app/frontend/test-results/
             /tmp/theeverthread-backend.log
+            /tmp/theeverthread-resend-stub.log
 
   publish:
     needs: verify

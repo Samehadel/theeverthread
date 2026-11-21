@@ -15,6 +15,7 @@ import java.time.*;
 public class PendingRegistrationCleanup {
     private final AccountRepository accounts;
     private final VerificationEmailRepository emails;
+    private final OutboundEmailRepository outboundEmails;
     private final RegistrationLocks locks;
     private final Clock clock;
     private final JdbcTemplate jdbc;
@@ -22,11 +23,13 @@ public class PendingRegistrationCleanup {
     public PendingRegistrationCleanup(
             AccountRepository accounts,
             VerificationEmailRepository emails,
+            OutboundEmailRepository outboundEmails,
             RegistrationLocks locks,
             Clock clock,
             JdbcTemplate jdbc) {
         this.accounts = accounts;
         this.emails = emails;
+        this.outboundEmails = outboundEmails;
         this.locks = locks;
         this.clock = clock;
         this.jdbc = jdbc;
@@ -46,7 +49,9 @@ public class PendingRegistrationCleanup {
                     .ifPresent(
                             account -> {
                                 if (emails.findById(account.getId())
-                                        .filter(e -> e.getStatus() == EmailDeliveryStatus.SENDING)
+                                        .map(VerificationEmailEntity::getLatestEmailId)
+                                        .flatMap(outboundEmails::findById)
+                                        .filter(e -> e.getStatus() == OutboundEmail.Status.PENDING)
                                         .isPresent()) {
                                     return;
                                 }

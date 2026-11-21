@@ -254,12 +254,96 @@ class DatabaseInitializationTests {
         }
     }
 
+    @Test
+    void outboxMigrationPreservesUsableLinksAndDoesNotReplayAmbiguousLegacySubmissions()
+            throws Exception {
+        String migration = "identity/20261121-001-email-outbox.sql";
+        try (var connection = connection();
+                var statement = connection.createStatement()) {
+            statement.execute("CREATE SCHEMA email_upgrade; SET search_path TO email_upgrade");
+            try {
+                initialize(statement, migration);
+                statement.execute(
+                        """
+                        INSERT INTO WORKSPACE (NAME, STATUS) VALUES ('Old workspace', 'ACTIVE');
+                        INSERT INTO ACCOUNT (EMAIL, FULL_NAME, PASSWORD_HASH, STATUS, UPDATED_AT)
+                        VALUES ('sent@example.com', 'Sent', 'hash', 'PENDING', CURRENT_TIMESTAMP),
+                               ('inflight@example.com', 'In flight', 'hash', 'PENDING', CURRENT_TIMESTAMP),
+                               ('unsent@example.com', 'Unsent', 'hash', 'PENDING', CURRENT_TIMESTAMP);
+                        INSERT INTO VERIFICATION_EMAIL
+                            (ACCOUNT_ID, RECIPIENT, STATUS, TOKEN_HASH, TOKEN_EXPIRES_AT,
+                             LAST_SENT_AT, SMTP_MESSAGE_ID, FAILURE_CODE, NEXT_ATTEMPT_AT)
+                        VALUES (1, 'sent@example.com', 'SMTP_ACCEPTED', repeat('1', 64),
+                                '2030-01-02T00:00Z', '2030-01-01T00:00Z', 'old-smtp-id', NULL, NULL),
+                               (2, 'inflight@example.com', 'SENDING', NULL, NULL, NULL, NULL, NULL, NULL),
+                               (3, 'unsent@example.com', 'FAILED', NULL, NULL, NULL, NULL,
+                                'SMTP_AUTHENTICATION_FAILED', CURRENT_TIMESTAMP);
+                        INSERT INTO TEAM_INVITATION
+                            (WORKSPACE_ID, EMAIL, ADMINISTRATOR_NAME, ADMINISTRATOR_ID,
+                             STATUS, TOKEN_HASH, EXPIRES_AT, ATTEMPTED_AT, SENT_AT,
+                             REPLACEMENT_TOKEN_HASH, REPLACEMENT_EXPIRES_AT, REPLACEMENT_ATTEMPTED_AT)
+                        VALUES (1, 'member@example.com', 'Owner', 1, 'SMTP_ACCEPTED', repeat('2', 64),
+                                '2030-01-08T00:00Z', '2030-01-01T00:00Z', '2030-01-01T00:00Z',
+                                repeat('3', 64), '2030-01-10T00:00Z', '2030-01-03T00:00Z');
+                        """);
+                apply(statement, migration);
+                assertThat(
+                                scalar(
+                                        statement,
+                                        "SELECT COUNT(*) FROM EMAIL_OUTBOX WHERE STATUS='UNKNOWN'"))
+                        .isEqualTo("3");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        """
+                                        SELECT COUNT(*) FROM VERIFICATION_EMAIL WHERE ACCOUNT_ID = 1
+                                            AND TOKEN_HASH = repeat('1', 64)
+                                            AND TOKEN_EXPIRES_AT = '2030-01-02T00:00Z'
+                                            AND LATEST_EMAIL_ID IS NOT NULL
+                                        """))
+                        .isEqualTo("1");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        """
+                                        SELECT COUNT(*) FROM TEAM_INVITATION WHERE STATUS = 'READY'
+                                            AND TOKEN_HASH = repeat('2', 64) AND EXPIRES_AT = '2030-01-08T00:00Z'
+                                            AND REPLACEMENT_TOKEN_HASH IS NULL
+                                        """))
+                        .isEqualTo("1");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        """
+                                        SELECT COUNT(*) FROM VERIFICATION_EMAIL WHERE ACCOUNT_ID = 3
+                                            AND LATEST_EMAIL_ID IS NULL AND NEXT_ATTEMPT_AT IS NOT NULL
+                                        """))
+                        .isEqualTo("1");
+                assertThat(
+                                scalar(
+                                        statement,
+                                        "SELECT COUNT(*) FROM EMAIL_DELIVERY_EVENT WHERE REASON ="
+                                                + " 'old-smtp-id'"))
+                        .isEqualTo("1");
+            } finally {
+                statement.execute("SET search_path TO public; DROP SCHEMA email_upgrade CASCADE");
+            }
+        }
+    }
+
     private void initialize(Statement statement) throws Exception {
+        initialize(statement, "");
+    }
+
+    private void initialize(Statement statement, String skip) throws Exception {
         try (var stream = getClass().getResourceAsStream("/db/changelog-master.yaml")) {
             var changelog = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
             for (var line :
                     changelog.lines().filter(value -> value.contains("file: db/")).toList()) {
-                apply(statement, line.substring(line.indexOf("file: db/") + 9).trim());
+                String path = line.substring(line.indexOf("file: db/") + 9).trim();
+                if (!path.equals(skip)) {
+                    apply(statement, path);
+                }
             }
         }
     }

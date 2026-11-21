@@ -42,16 +42,13 @@ class InvitationAcceptanceIntegrationTests {
     }
 
     @Autowired
-
     IdentityService identity;
     @Autowired
     InvitationService invitations;
     @Autowired
     InvitationAcceptanceService acceptance;
-    @Autowired
-    VerificationEmailTransactions delivery;
-    @Autowired
-    VerificationEmailWorker worker;
+    @Autowired EmailDeliveryTransactions delivery;
+    @Autowired EmailDeliveryWorker worker;
     @Autowired
     JdbcTemplate jdbc;
     @Autowired
@@ -60,11 +57,9 @@ class InvitationAcceptanceIntegrationTests {
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     com.theeverthread.foundation.internal.security.SessionLogin sessionLogin;
 
-    @MockitoBean
-
-    VerificationMail verification;
-    @MockitoBean
-    InvitationMail mail;
+    @MockitoBean ResendClient mail;
+    @Autowired ResendWebhook webhook;
+    TestEmailDelivery fake;
     @MockitoBean
     Clock clock;
     final Instant now = Instant.parse("2026-10-07T08:00:00Z");
@@ -75,39 +70,24 @@ class InvitationAcceptanceIntegrationTests {
                 "TRUNCATE REFRESH_SESSION, TEAM_INVITATION, VERIFICATION_EMAIL, ACCOUNT,"
                         + " WORKSPACE CASCADE");
         when(clock.instant()).thenReturn(now);
-        when(mail.send(any(), anyString())).thenReturn("<invitation@test.local>");
+        fake = new TestEmailDelivery(mail, webhook, clock);
         admin("admin@example.com", "acme.com");
     }
 
     void admin(String email, String domain) {
         identity.register(new RegistrationRequest("Ada", email, "Validpass!"));
-        var link = new String[1];
-        var id = new Long[1];
-        doAnswer(
-                        call -> {
-                            id[0] = call.getArgument(1);
-                            link[0] = call.getArgument(2);
-                            return "<verification@test.local>";
-                        })
-                .when(verification)
-                .send(eq(email), any(), anyString());
         worker.runOnce();
-        identity.verify(id[0], link[0]);
+        var message = fake.latest(email);
+        identity.verify(message.targetId(), message.token());
+        clearInvocations(mail);
     }
 
     InvitationLinkRequest invite(String actor, String email) {
-        var token = new String[1];
-        doAnswer(
-                        call -> {
-                            token[0] = call.getArgument(1);
-                            return "<invitation@test.local>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
         var invitation =
                 invitations.send(
                         actor, identity.current(actor).workspaceId(), new InvitationRequest(email));
-        return new InvitationLinkRequest(invitation.id(), token[0]);
+        worker.runOnce();
+        return new InvitationLinkRequest(invitation.id(), fake.latest(email).token());
     }
 
     MemberRegistrationRequest registration(InvitationLinkRequest link) {
@@ -174,7 +154,7 @@ class InvitationAcceptanceIntegrationTests {
                                 + " administrator.");
         rejected(link, "ACCOUNT_LIMIT");
         assertThat(jdbc.queryForObject("SELECT STATUS FROM TEAM_INVITATION", String.class))
-                .isEqualTo("SMTP_ACCEPTED");
+                .isEqualTo("READY");
         jdbc.update("UPDATE WORKSPACE SET MAX_ACTIVE_ACCOUNTS=2");
         assertThat(acceptance.accept(registration(link), null).accessRole()).isEqualTo("MEMBER");
     }
@@ -194,13 +174,14 @@ class InvitationAcceptanceIntegrationTests {
     }
 
     @Test
-    void acceptanceCancelsUnfinishedSignupAndCannotRestoreItsVerificationEvenWithSmtpInFlight() {
+    void
+            acceptanceCancelsUnfinishedSignupAndCannotRestoreItsVerificationEvenWithSubmissionInFlight() {
         identity.register(
                 new RegistrationRequest("Old profile", "alice@example.com", "Oldpassword!"));
         var accountId =
                 jdbc.queryForObject(
                         "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", Long.class);
-        var attempt = delivery.claim(accountId);
+        var attempt = delivery.claim(identity.deliveryStatus("alice@example.com").emailReference());
         var link = invite("admin@example.com", "alice@example.com");
         assertThat(acceptance.preview(link).status()).isEqualTo("READY");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM WORKSPACE", Integer.class))
@@ -218,7 +199,14 @@ class InvitationAcceptanceIntegrationTests {
                                 Integer.class,
                                 accountId))
                 .isZero();
-        delivery.accepted(attempt, "a".repeat(43), "<late@test.local>");
+        var providerId = UUID.randomUUID();
+        delivery.submitted(attempt, new ResendClient.Accepted(providerId));
+        fake.event(
+                new TestEmailDelivery.Message(
+                        attempt.id(), providerId, "alice@example.com", accountId, "a".repeat(43)),
+                "email.delivered",
+                now,
+                Map.of());
         assertThatThrownBy(() -> identity.verify(accountId, "a".repeat(43)))
                 .isInstanceOf(IdentityException.class);
         assertThat(identity.current("alice@example.com").accessRole()).isEqualTo("OWNER");
@@ -420,9 +408,8 @@ class InvitationAcceptanceIntegrationTests {
         var accountId =
                 jdbc.queryForObject(
                         "SELECT ID FROM ACCOUNT WHERE EMAIL='alice@example.com'", Long.class);
-        var attempt = delivery.claim(accountId);
-        var token = "v".repeat(43);
-        delivery.accepted(attempt, token, "<verification@test.local>");
+        worker.runOnce();
+        var token = fake.latest("alice@example.com").token();
         var link = invite("admin@example.com", "alice@example.com");
         var start = new CountDownLatch(1);
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {

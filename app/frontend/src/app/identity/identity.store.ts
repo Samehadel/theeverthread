@@ -43,15 +43,16 @@ export const IdentityStore = signalStore(
     },
     refreshDelivery: rxMethod<string>(
       pipe(
-        exhaustMap((email) =>
-          api.deliveryStatus(email).pipe(
+        exhaustMap((email) => {
+          const current = store.pending();
+          return api.deliveryStatus(email).pipe(
             tap((pending) => {
-              if (store.pending()?.email === email)
+              if (current?.email === email && current === store.pending())
                 patchState(store, { pending });
             }),
             catchError(() => EMPTY),
-          ),
-        ),
+          );
+        }),
       ),
     ),
     run: rxMethod<Action>(
