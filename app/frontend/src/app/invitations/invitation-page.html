@@ -88,6 +88,7 @@
                 (ngModelChange)="store.updateEmail(row.id, $event)"
                 [disabled]="
                   row.state === 'sent' ||
+                  row.state === 'queued' ||
                   row.state === 'sending' ||
                   row.state === 'uncertain'
                 "
@@ -104,6 +105,7 @@
                 type="submit"
                 [disabled]="
                   row.state === 'sent' ||
+                  row.state === 'queued' ||
                   row.state === 'sending' ||
                   row.state === 'uncertain'
                 "
@@ -114,7 +116,9 @@
                       ? "invitations.sending"
                       : row.state === "sent"
                         ? "invitations.sent"
-                        : "invitations.send"
+                        : row.state === "queued"
+                          ? "invitations.queued"
+                          : "invitations.send"
                   )
                 }}
               </button>
@@ -128,7 +132,9 @@
               [class.text-green-300]="row.state === 'sent'"
               [class.text-red-300]="row.state === 'error'"
               [class.text-amber-200]="
-                row.state === 'pending' || row.state === 'uncertain'
+                row.state === 'pending' ||
+                row.state === 'uncertain' ||
+                row.state === 'queued'
               "
             >
               @if (row.state === "sending") {
@@ -141,7 +147,7 @@
                 }}
               }
             </div>
-            @if (row.state === "uncertain") {
+            @if (row.state === "uncertain" || row.state === "queued") {
               <button
                 type="button"
                 class="button secondary mt-3"
@@ -150,14 +156,14 @@
                 {{ t("invitations.check") }}
               </button>
             }
-            @if (row.state === "pending") {
+            @if (row.state === "pending" || row.state === "uncertain") {
               <a
                 class="mt-3 inline-block underline"
-                routerLink="/workspace/invitations/pending"
+                routerLink="/workspace/team"
                 >{{ t("invitations.manage") }}</a
               >
             }
-            @if (row.state === "sent" && $last) {
+            @if ((row.state === "sent" || row.state === "queued") && $last) {
               <button
                 class="button secondary mt-5"
                 type="button"

@@ -109,7 +109,7 @@ describe('Registration email recovery', () => {
 
   const saved: Pending = {
     email: 'saved@example.com',
-    deliveryStatus: 'SMTP_ACCEPTED',
+    deliveryStatus: 'PROVIDER_ACCEPTED',
     resendAvailableAt: '2020-01-01T00:00:00Z',
   };
 

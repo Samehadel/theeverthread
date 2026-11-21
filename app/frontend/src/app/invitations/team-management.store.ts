@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { patchState, signalStore, withMethods, withState } from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { catchError, EMPTY, exhaustMap, pipe, tap } from 'rxjs';
+import { catchError, EMPTY, exhaustMap, pipe, switchMap, tap } from 'rxjs';
 import { ActiveMember, Invitation, InvitationApi } from './invitation.api';
 
 export const TeamManagementStore = signalStore(
@@ -21,7 +21,7 @@ export const TeamManagementStore = signalStore(
       error?.error?.error?.message ?? 'team.loadFailed';
     const loadInvitations = rxMethod<void>(
       pipe(
-        exhaustMap(() => {
+        switchMap(() => {
           patchState(store, { invitationsLoading: true, invitationsError: '' });
           return api.sent().pipe(
             tap((invitations) =>

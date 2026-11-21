@@ -140,12 +140,12 @@ describe('Identity workflow', () => {
     http.expectOne('/api/registration/status').flush({
       data: {
         email: 'ada@example.com',
-        deliveryStatus: 'SMTP_ACCEPTED',
+        deliveryStatus: 'PROVIDER_ACCEPTED',
         resendAvailableAt: '2026-10-04T12:01:00Z',
       },
       error: null,
     });
-    expect(store.pending()?.deliveryStatus).toBe('SMTP_ACCEPTED');
+    expect(store.pending()?.deliveryStatus).toBe('PROVIDER_ACCEPTED');
     store.refreshDelivery('ada@example.com');
     csrf();
     store.clear();

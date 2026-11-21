@@ -53,7 +53,6 @@ class IndividualIdentityIntegrationTests {
     }
 
     @Autowired
-
     IdentityService identity;
     @Autowired
     SocialIdentityService social;
@@ -63,8 +62,7 @@ class IndividualIdentityIntegrationTests {
     InvitationAcceptanceService acceptance;
     @Autowired
     InvitationTransactions invitations;
-    @Autowired
-    VerificationEmailWorker worker;
+    @Autowired EmailDeliveryWorker worker;
     @Autowired
     PendingRegistrationCleanup cleanup;
     @Autowired
@@ -73,14 +71,12 @@ class IndividualIdentityIntegrationTests {
     MockMvc mvc;
     @Autowired
     JsonMapper json;
-    @MockitoBean
-    VerificationMail mail;
+    @MockitoBean ResendClient mail;
+    @Autowired ResendWebhook webhook;
+    TestEmailDelivery fake;
     @MockitoBean
     Clock clock;
     final Instant now = Instant.parse("2026-10-21T00:00:00Z");
-    final Map<String, Link> links = new ConcurrentHashMap<>();
-
-    record Link(Long id, String token) {}
 
     final String password = "Validpass!";
 
@@ -88,15 +84,7 @@ class IndividualIdentityIntegrationTests {
     void setup() {
         jdbc.execute("TRUNCATE ACCOUNT, WORKSPACE, REFRESH_SESSION CASCADE");
         when(clock.instant()).thenReturn(now);
-        doAnswer(
-                        call -> {
-                            links.put(
-                                    call.getArgument(0),
-                                    new Link(call.getArgument(1), call.getArgument(2)));
-                            return "test-message";
-                        })
-                .when(mail)
-                .send(anyString(), any(), anyString());
+        fake = new TestEmailDelivery(mail, webhook, clock);
     }
 
     RegistrationRequest request(String email) {
@@ -110,15 +98,15 @@ class IndividualIdentityIntegrationTests {
     void activate(String email) {
         identity.register(request(email));
         worker.runOnce();
-        var link = links.get(email.toLowerCase(Locale.ROOT));
-        identity.verify(link.id(), link.token());
+        var link = fake.latest(email.toLowerCase(Locale.ROOT));
+        identity.verify(link.targetId(), link.token());
     }
 
     Long workspace() {
         identity.register(new RegistrationRequest("Admin", "admin@example.com", password));
         worker.runOnce();
-        var link = links.get("admin@example.com");
-        return identity.verify(link.id(), link.token()).account().workspaceId();
+        var link = fake.latest("admin@example.com");
+        return identity.verify(link.targetId(), link.token()).account().workspaceId();
     }
 
     void code(Runnable operation, String code) {
@@ -202,11 +190,11 @@ class IndividualIdentityIntegrationTests {
                                                         password))))
                 .andExpect(status().isUnauthorized());
         worker.runOnce();
-        var link = links.get("person@example.com");
-        var account = identity.verify(link.id(), link.token()).account();
+        var link = fake.latest("person@example.com");
+        var account = identity.verify(link.targetId(), link.token()).account();
         assertThat(account.workspaceId()).isNotNull();
         assertThat(account.accessRole()).isEqualTo("OWNER");
-        assertThat(identity.verify(link.id(), link.token()).account()).isNull();
+        assertThat(identity.verify(link.targetId(), link.token()).account()).isNull();
         assertThat(identity.credentials("person@example.com").active()).isTrue();
         mvc.perform(
                         post("/api/registration")
@@ -219,16 +207,18 @@ class IndividualIdentityIntegrationTests {
     void verificationResendExpiryAndRetentionApplyToIndividuals() {
         identity.register(request("person@example.com"));
         worker.runOnce();
-        var old = links.get("person@example.com");
+        var old = fake.latest("person@example.com");
         code(() -> identity.resend("person@example.com"), "RESEND_COOLDOWN");
         when(clock.instant()).thenReturn(now.plusSeconds(60));
         identity.resend("person@example.com");
         worker.runOnce();
-        var replacement = links.get("person@example.com");
+        var replacement = fake.latest("person@example.com");
         assertThat(replacement.token()).isNotEqualTo(old.token());
-        code(() -> identity.verify(old.id(), old.token()), "INVALID_VERIFICATION");
+        code(() -> identity.verify(old.targetId(), old.token()), "INVALID_VERIFICATION");
         when(clock.instant()).thenReturn(now.plus(Duration.ofDays(2)));
-        code(() -> identity.verify(replacement.id(), replacement.token()), "EXPIRED_VERIFICATION");
+        code(
+                () -> identity.verify(replacement.targetId(), replacement.token()),
+                "EXPIRED_VERIFICATION");
         when(clock.instant()).thenReturn(now.plus(Duration.ofDays(31)));
         cleanup.deleteAbandoned();
         assertThat(identity.credentials("person@example.com")).isNull();
@@ -449,17 +439,13 @@ class IndividualIdentityIntegrationTests {
     void pendingSignupAcceptsWorkspaceInvitationWithoutReplacingCredentials() {
         var shared = workspace();
         identity.register(request("person@example.com"));
-        String token = "a".repeat(43);
         var invitation =
-                invitations
-                        .claim(
-                                "admin@example.com",
-                                shared,
-                                new InvitationRequest("person@example.com"),
-                                token)
-                        .view();
-        invitations.complete(invitation.id(), token, "smtp-id", null);
-        var link = new InvitationLinkRequest(invitation.id(), token);
+                invitations.send(
+                        "admin@example.com", shared, new InvitationRequest("person@example.com"));
+        worker.runOnce();
+        var link =
+                new InvitationLinkRequest(
+                        invitation.id(), fake.message(invitation.emailReference()).token());
         assertThat(acceptance.preview(link).status()).isEqualTo("READY");
         var account =
                 acceptance.accept(
@@ -470,11 +456,10 @@ class IndividualIdentityIntegrationTests {
         assertThat(identity.current(account.email()).workspaceId()).isNotEqualTo(shared);
         code(
                 () ->
-                        invitations.claim(
+                        invitations.send(
                                 account.email(),
                                 shared,
-                                new InvitationRequest("someone@example.com"),
-                                token),
+                                new InvitationRequest("someone@example.com")),
                 "WORKSPACE_ACCESS_DENIED");
         code(
                 () ->

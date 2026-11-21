@@ -38,8 +38,9 @@ export class TeamManagementPage {
       .invitations()
       .filter(
         (i) =>
-          i.status !== 'SMTP_ACCEPTED' ||
-          new Date(i.expiresAt).getTime() > this.now(),
+          i.deliveryStatus !== 'DELIVERED' ||
+          i.status === 'ACCEPTED' ||
+          Date.parse(i.expiresAt ?? '') > this.now(),
       ),
   );
   readonly authFailed = computed(
@@ -74,9 +75,8 @@ export class TeamManagementPage {
 
   eligible(invitation: Invitation) {
     return (
-      invitation.status === 'FAILED' ||
-      (invitation.status === 'SMTP_ACCEPTED' &&
-        new Date(invitation.expiresAt).getTime() > this.now())
+      invitation.resendEligible &&
+      (!invitation.expiresAt || Date.parse(invitation.expiresAt) > this.now())
     );
   }
 

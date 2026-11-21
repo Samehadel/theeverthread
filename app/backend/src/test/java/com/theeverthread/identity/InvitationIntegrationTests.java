@@ -42,20 +42,17 @@ class InvitationIntegrationTests {
     }
 
     @Autowired
-
     IdentityService identity;
     @Autowired
     InvitationService invitations;
-    @Autowired
-    VerificationEmailWorker worker;
+    @Autowired EmailDeliveryWorker worker;
     @Autowired
     JdbcTemplate jdbc;
     @Autowired
     MockMvc mvc;
-    @MockitoBean
-    VerificationMail verification;
-    @MockitoBean
-    InvitationMail mail;
+    @MockitoBean ResendClient mail;
+    @Autowired ResendWebhook webhook;
+    TestEmailDelivery fake;
     @MockitoBean
     Clock clock;
     final Instant now = Instant.parse("2026-10-07T08:00:00Z");
@@ -64,31 +61,42 @@ class InvitationIntegrationTests {
     void setup() {
         jdbc.execute("TRUNCATE TEAM_INVITATION, VERIFICATION_EMAIL, ACCOUNT, WORKSPACE CASCADE");
         when(clock.instant()).thenReturn(now);
-        when(mail.send(any(), anyString())).thenReturn("<invitation@test.local>");
+        fake = new TestEmailDelivery(mail, webhook, clock);
         admin("admin@example.com", "acme.com");
     }
 
     void admin(String email, String domain) {
         identity.register(new RegistrationRequest("Ada", email, "Validpass!"));
-        var link = new String[1];
-        var id = new Long[1];
-        doAnswer(
-                        call -> {
-                            id[0] = call.getArgument(1);
-                            link[0] = call.getArgument(2);
-                            return "<verification@test.local>";
-                        })
-                .when(verification)
-                .send(eq(email), any(), anyString());
         worker.runOnce();
-        identity.verify(id[0], link[0]);
+        var message = fake.latest(email);
+        identity.verify(message.targetId(), message.token());
+        clearInvocations(mail);
     }
 
     InvitationView send(String email) {
-        return invitations.send(
+        return sendAs("admin@example.com", email);
+    }
+
+    InvitationView sendAs(String actor, String email) {
+        var workspace = identity.current(actor).workspaceId();
+        var request = new InvitationRequest(email);
+        invitations.send(actor, workspace, request);
+        worker.runOnce();
+        return invitations.status(actor, workspace, request);
+    }
+
+    InvitationView latest(String email) {
+        return invitations.status(
                 "admin@example.com",
                 identity.current("admin@example.com").workspaceId(),
                 new InvitationRequest(email));
+    }
+
+    InvitationView resend(Long id, String email) {
+        invitations.resend(
+                "admin@example.com", identity.current("admin@example.com").workspaceId(), id);
+        worker.runOnce();
+        return latest(email);
     }
 
     void rejected(String email, String code) {
@@ -101,41 +109,38 @@ class InvitationIntegrationTests {
     void sendsPersonalAddressWithoutCreatingMembershipAndStoresOnlyHashWithSevenDayExpiry() {
         var result = send("Person@gmail.com");
         assertThat(result.email()).isEqualTo("person@gmail.com");
-        assertThat(result.status()).isEqualTo("SMTP_ACCEPTED");
+        assertThat(result.status()).isEqualTo("READY");
         assertThat(result.expiresAt()).isEqualTo(now.plus(Duration.ofDays(7)));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ACCOUNT", Integer.class)).isEqualTo(1);
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT LENGTH(TOKEN_HASH) FROM TEAM_INVITATION", Integer.class))
                 .isEqualTo(64);
-        assertThat(jdbc.queryForObject("SELECT SMTP_MESSAGE_ID FROM TEAM_INVITATION", String.class))
-                .isEqualTo("<invitation@test.local>");
+        assertThat(
+                        jdbc.queryForObject(
+                                "SELECT PROVIDER_ID FROM EMAIL_OUTBOX WHERE ID=?",
+                                UUID.class,
+                                result.emailReference()))
+                .isEqualTo(fake.latest(result.email()).providerId());
         rejected("PERSON@gmail.com", "INVITATION_PENDING");
-        verify(mail, times(1)).send(any(), anyString());
+        verify(mail, times(1)).submit(any(), any(byte[].class));
     }
 
     @Test
     void membershipWinsOverPendingAndSelfAndOtherWorkspaceAreRejected() {
         rejected("admin@example.com", "ALREADY_MEMBER");
         admin("other@example.com", "other.com");
-        assertThat(send("other@example.com").status()).isEqualTo("SMTP_ACCEPTED");
+        assertThat(send("other@example.com").status()).isEqualTo("READY");
         assertThat(identity.current("other@example.com").workspaces()).hasSize(1);
         rejected("other@example.com", "INVITATION_PENDING");
-        verify(mail, times(1)).send(any(), anyString());
+        verify(mail, times(1)).submit(any(), any(byte[].class));
     }
 
     @Test
     void pendingOtherWorkspaceDoesNotReserveMembershipAndExpiredOrRevokedCanBeReplaced() {
         send("new@example.com");
         admin("other@example.com", "other.com");
-        assertThat(
-                        invitations
-                                .send(
-                                        "other@example.com",
-                                        identity.current("other@example.com").workspaceId(),
-                                        new InvitationRequest("new@example.com"))
-                                .status())
-                .isEqualTo("SMTP_ACCEPTED");
+        assertThat(sendAs("other@example.com", "new@example.com").status()).isEqualTo("READY");
         when(clock.instant()).thenReturn(now.plus(Duration.ofDays(7)));
         send("new@example.com");
         jdbc.update(
@@ -144,7 +149,7 @@ class InvitationIntegrationTests {
         send("new@example.com");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM TEAM_INVITATION", Integer.class))
                 .isEqualTo(2);
-        verify(mail, times(4)).send(any(), anyString());
+        verify(mail, times(3)).submit(any(), any(byte[].class));
     }
 
     @Test
@@ -159,7 +164,7 @@ class InvitationIntegrationTests {
                                 + " send invitations.");
         when(clock.instant()).thenReturn(now.plus(Duration.ofDays(8)));
         rejected("person0@gmail.com", "ACCOUNT_LIMIT");
-        verify(mail, times(4)).send(any(), anyString());
+        verify(mail, times(4)).submit(any(), any(byte[].class));
     }
 
     @Test
@@ -173,66 +178,60 @@ class InvitationIntegrationTests {
     }
 
     @Test
-    void failedSendInvalidatesTokenAndAllowsCorrectedAddressOrRetry() {
-        when(mail.send(any(), anyString())).thenThrow(new EmailDeliveryException());
-        assertThat(send("new@example.com").status()).isEqualTo("FAILED");
+    void failedSendLeavesNoUsableLinkAndExplicitRetryCreatesOneNewMessage() {
+        doReturn(TestEmailDelivery.rejected()).when(mail).submit(any(), any(byte[].class));
+        var failed = send("new@example.com");
+        assertThat(failed.deliveryStatus()).isEqualTo("FAILED");
         assertThat(jdbc.queryForObject("SELECT TOKEN_HASH FROM TEAM_INVITATION", String.class))
                 .isNull();
-        doReturn("<retry@test.local>").when(mail).send(any(), anyString());
-        assertThat(send("new@example.com").status()).isEqualTo("SMTP_ACCEPTED");
+        fake = new TestEmailDelivery(mail, webhook, clock);
+        when(clock.instant()).thenReturn(now.plusSeconds(60));
+        assertThat(resend(failed.id(), failed.email()).deliveryStatus()).isEqualTo("DELIVERED");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM TEAM_INVITATION", Integer.class))
                 .isEqualTo(1);
     }
 
+
     @Test
     void simultaneousRequestsCommitOneAttemptAndNeverSendDuplicateEmail() throws Exception {
-        var entered = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        doAnswer(
-                        call -> {
-                            entered.countDown();
-                            assertThat(release.await(10, TimeUnit.SECONDS)).isTrue();
-                            return "<accepted@test.local>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
+        var workspace = identity.current("admin@example.com").workspaceId();
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            var first = pool.submit(() -> send("new@example.com"));
-            try {
-                assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
-                assertThat(send("NEW@example.com").status()).isEqualTo("SENDING");
-                assertThat(
-                                invitations
-                                        .status(
-                                                "admin@example.com",
-                                                identity.current("admin@example.com").workspaceId(),
-                                                new InvitationRequest("new@example.com"))
-                                        .status())
-                        .isEqualTo("SENDING");
-            } finally {
-                release.countDown();
-            }
-            assertThat(first.get(10, TimeUnit.SECONDS).status()).isEqualTo("SMTP_ACCEPTED");
+            var first =
+                    pool.submit(
+                            () ->
+                                    invitations.send(
+                                            "admin@example.com",
+                                            workspace,
+                                            new InvitationRequest("new@example.com")));
+            var second =
+                    pool.submit(
+                            () ->
+                                    invitations.send(
+                                            "admin@example.com",
+                                            workspace,
+                                            new InvitationRequest("NEW@example.com")));
+            assertThat(first.get(10, TimeUnit.SECONDS).emailReference())
+                    .isEqualTo(second.get(10, TimeUnit.SECONDS).emailReference());
         }
-        verify(mail, times(1)).send(any(), anyString());
+        assertThat(latest("new@example.com").deliveryStatus()).isEqualTo("PENDING");
+        verifyNoInteractions(mail);
+        worker.runOnce();
+        assertThat(latest("new@example.com").deliveryStatus()).isEqualTo("DELIVERED");
+        verify(mail, times(1)).submit(any(), any(byte[].class));
     }
 
     @Test
-    void completionPersistenceFailureLeavesAmbiguousAttemptAndRepeatedRequestsCannotResend() {
+    void invitationRollsBackIfTheEmailObligationCannotBeSaved() {
         jdbc.execute(
-                "CREATE FUNCTION reject_invitation_completion() RETURNS TRIGGER AS $$ BEGIN IF"
-                    + " NEW.STATUS='SMTP_ACCEPTED' THEN RAISE EXCEPTION 'Simulated failure'; END"
-                    + " IF; RETURN NEW; END; $$ LANGUAGE plpgsql");
-        jdbc.execute(
-                "CREATE TRIGGER reject_invitation_completion BEFORE UPDATE ON TEAM_INVITATION FOR"
-                        + " EACH ROW EXECUTE FUNCTION reject_invitation_completion()");
+                "ALTER TABLE EMAIL_OUTBOX ADD CONSTRAINT reject_invite"
+                        + " CHECK (INVITATION_ID IS NULL)");
         try {
             assertThatThrownBy(() -> send("new@example.com")).isInstanceOf(RuntimeException.class);
-            assertThat(send("new@example.com").status()).isEqualTo("SENDING");
-            verify(mail, times(1)).send(any(), anyString());
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM TEAM_INVITATION", Integer.class))
+                    .isZero();
+            verifyNoInteractions(mail);
         } finally {
-            jdbc.execute("DROP TRIGGER reject_invitation_completion ON TEAM_INVITATION");
-            jdbc.execute("DROP FUNCTION reject_invitation_completion()");
+            jdbc.execute("ALTER TABLE EMAIL_OUTBOX DROP CONSTRAINT reject_invite");
         }
     }
 
@@ -273,7 +272,7 @@ class InvitationIntegrationTests {
                                 .contentType("application/json")
                                 .content("{\"email\":\"new@gmail.com\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("SMTP_ACCEPTED"));
+                .andExpect(jsonPath("$.data.deliveryStatus").value("PENDING"));
         admin("other@example.com", "other.com");
         mvc.perform(
                         post("/api/invitations/status")
@@ -330,7 +329,7 @@ class InvitationIntegrationTests {
                                         identity.current("admin@example.com").workspaceId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.invitations[0].email").value("saved@gmail.com"))
-                .andExpect(jsonPath("$.data.invitations[0].status").value("SMTP_ACCEPTED"))
+                .andExpect(jsonPath("$.data.invitations[0].status").value("READY"))
                 .andExpect(jsonPath("$.data.invitations[0].tokenHash").doesNotExist())
                 .andExpect(jsonPath("$.data.hasMore").value(false));
     }
@@ -395,60 +394,140 @@ class InvitationIntegrationTests {
     InvitationAcceptanceService acceptance;
 
     @Test
-    void resendCooldownSuccessAndFailurePreserveCorrectLink() {
-        var tokens = new ArrayList<String>();
-        doAnswer(
-                        call -> {
-                            tokens.add(call.getArgument(1));
-                            return "<mail@test>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
+    void resendCooldownAndDeliveredReplacementRotateLinkButBouncePreservesPreviousTerms() {
         var original = send("resend@example.com");
+        var first = fake.latest(original.email());
         assertThat(original.sentAt()).isEqualTo(now);
-        assertThatThrownBy(
-                        () ->
-                                invitations.resend(
-                                        "admin@example.com",
-                                        identity.current("admin@example.com").workspaceId(),
-                                        original.id()))
+        assertThatThrownBy(() -> resend(original.id(), original.email()))
                 .isInstanceOfSatisfying(
                         IdentityException.class,
-                        e -> assertThat(e.code()).isEqualTo("RESEND_COOLDOWN"));
+                        error -> assertThat(error.code()).isEqualTo("RESEND_COOLDOWN"));
+
         when(clock.instant()).thenReturn(now.plusSeconds(60));
-        var replacement =
-                invitations.resend(
-                        "admin@example.com",
-                        identity.current("admin@example.com").workspaceId(),
-                        original.id());
+        var replacement = resend(original.id(), original.email());
+        var second = fake.latest(original.email());
         assertThat(replacement.expiresAt()).isEqualTo(now.plusSeconds(60).plus(Duration.ofDays(7)));
         assertThat(replacement.sentAt()).isEqualTo(now.plusSeconds(60));
         assertThat(
                         acceptance
-                                .preview(
-                                        new InvitationLinkRequest(original.id(), tokens.getFirst()))
+                                .preview(new InvitationLinkRequest(original.id(), first.token()))
                                 .status())
                 .isEqualTo("INVALID_INVITATION");
-        assertThat(acceptance.preview(new InvitationLinkRequest(original.id(), tokens.getLast())))
-                .isNotNull();
+
         when(clock.instant()).thenReturn(now.plusSeconds(120));
-        doThrow(new EmailDeliveryException()).when(mail).send(any(), anyString());
-        var failed =
+        var queued =
                 invitations.resend(
                         "admin@example.com",
                         identity.current("admin@example.com").workspaceId(),
                         original.id());
-        assertThat(failed.deliveryFailed()).isTrue();
-        assertThat(failed.status()).isEqualTo("SMTP_ACCEPTED");
+        var third =
+                new TestEmailDelivery.Message(
+                        queued.emailReference(),
+                        UUID.randomUUID(),
+                        original.email(),
+                        original.id(),
+                        "");
+        doReturn(new ResendClient.Accepted(third.providerId()))
+                .when(mail)
+                .submit(eq(queued.emailReference()), any(byte[].class));
+        worker.runOnce();
+        fake.event(
+                third,
+                "email.bounced",
+                now.plusSeconds(122),
+                Map.of("bounce", Map.of("message", "Mailbox unavailable")));
+        fake.event(second, "email.delivered", now.plusSeconds(121), Map.of());
+        fake.event(third, "email.delivered", now.plusSeconds(121), Map.of());
+
+        var failed = latest(original.email());
+        assertThat(failed.deliveryStatus()).isEqualTo("FAILED");
+        assertThat(failed.emailReference()).isEqualTo(queued.emailReference());
         assertThat(failed.sentAt()).isEqualTo(replacement.sentAt());
         assertThat(failed.expiresAt()).isEqualTo(replacement.expiresAt());
-        assertThat(acceptance.preview(new InvitationLinkRequest(original.id(), tokens.getLast())))
-                .isNotNull();
+        assertThat(
+                        acceptance
+                                .preview(new InvitationLinkRequest(original.id(), second.token()))
+                                .status())
+                .isEqualTo("READY");
+    }
+
+    @Test
+    void failedReplacementKeepsEarlierAcceptedButUnconfirmedLinkUsable() {
+        String recipient = "unconfirmed@example.com";
+        var workspace = identity.current("admin@example.com").workspaceId();
+        var original =
+                invitations.send("admin@example.com", workspace, new InvitationRequest(recipient));
+        var messages = new ArrayList<TestEmailDelivery.Message>();
+        doAnswer(
+                        call -> {
+                            var message =
+                                    TestEmailDelivery.parse(
+                                            call.getArgument(0), call.getArgument(1));
+                            messages.add(message);
+                            return new ResendClient.Accepted(message.providerId());
+                        })
+                .when(mail)
+                .submit(eq(original.emailReference()), any(byte[].class));
+        worker.runOnce();
+
+        assertThat(latest(recipient).deliveryStatus()).isEqualTo("PROVIDER_ACCEPTED");
+        var link = new InvitationLinkRequest(original.id(), messages.getFirst().token());
+        assertThat(acceptance.preview(link).status()).isEqualTo("READY");
+        when(clock.instant()).thenReturn(now.plusSeconds(60));
+        var replacement = invitations.resend("admin@example.com", workspace, original.id());
+        doReturn(TestEmailDelivery.rejected())
+                .when(mail)
+                .submit(eq(replacement.emailReference()), any(byte[].class));
+        worker.runOnce();
+        assertThat(latest(recipient).deliveryStatus()).isEqualTo("FAILED");
+        fake.event(messages.getFirst(), "email.delivered", now.plusSeconds(1), Map.of());
+        assertThat(latest(recipient).deliveryStatus()).isEqualTo("FAILED");
+        assertThat(acceptance.preview(link).status()).isEqualTo("READY");
+        rejected(recipient, "INVITATION_PENDING");
+
+        jdbc.update("UPDATE TEAM_INVITATION SET STATUS='REVOKED' WHERE ID=?", original.id());
+        send(recipient);
+        assertThat(acceptance.preview(link).status()).isEqualTo("INVALID_INVITATION");
+    }
+
+    @Test
+    void laterBounceOfAReplacementRestoresOnlyTheImmediatelyPreviousLink() {
+        var original = send("late-bounce@example.com");
+        var first = fake.message(original.emailReference());
+        when(clock.instant()).thenReturn(now.plusSeconds(60));
+
+        var replacement = resend(original.id(), original.email());
+        assertThat(replacement.deliveryStatus()).isEqualTo("DELIVERED");
+        var second = fake.message(replacement.emailReference());
+        assertThat(
+                        acceptance
+                                .preview(new InvitationLinkRequest(original.id(), first.token()))
+                                .status())
+                .isEqualTo("INVALID_INVITATION");
+
+        fake.event(
+                second,
+                "email.bounced",
+                now.plusSeconds(61),
+                Map.of("bounce", Map.of("message", "Mailbox rejected after handoff")));
+        var failed = latest(original.email());
+        assertThat(failed.deliveryStatus()).isEqualTo("FAILED");
+        assertThat(failed.expiresAt()).isEqualTo(original.expiresAt());
+        assertThat(
+                        acceptance
+                                .preview(new InvitationLinkRequest(original.id(), first.token()))
+                                .status())
+                .isEqualTo("READY");
+        assertThat(
+                        acceptance
+                                .preview(new InvitationLinkRequest(original.id(), second.token()))
+                                .status())
+                .isEqualTo("INVALID_INVITATION");
     }
 
     @Test
     void failedInvitationsAreListedWithNoSentDateAndRetryChecksCapacityAndEligibility() {
-        doThrow(new EmailDeliveryException()).when(mail).send(any(), anyString());
+        doReturn(TestEmailDelivery.rejected()).when(mail).submit(any(), any(byte[].class));
         var failed = send("retry@example.com");
         assertThat(
                         invitations
@@ -468,15 +547,8 @@ class InvitationIntegrationTests {
                                         failed.id()))
                 .hasMessageContaining("limit of 1 active accounts");
         jdbc.update("UPDATE WORKSPACE SET MAX_ACTIVE_ACCOUNTS=10");
-        doReturn("<retry@test>").when(mail).send(any(), anyString());
-        assertThat(
-                        invitations
-                                .resend(
-                                        "admin@example.com",
-                                        identity.current("admin@example.com").workspaceId(),
-                                        failed.id())
-                                .status())
-                .isEqualTo("SMTP_ACCEPTED");
+        fake = new TestEmailDelivery(mail, webhook, clock);
+        assertThat(resend(failed.id(), failed.email()).deliveryStatus()).isEqualTo("DELIVERED");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM TEAM_INVITATION", Integer.class))
                 .isEqualTo(1);
         admin("other@example.com", "other.com");
@@ -496,49 +568,42 @@ class InvitationIntegrationTests {
                                         "admin@example.com",
                                         identity.current("admin@example.com").workspaceId(),
                                         failed.id())
-                                .status())
-                .isEqualTo("SMTP_ACCEPTED");
+                                .deliveryStatus())
+                .isEqualTo("PENDING");
     }
+
 
     @Test
     void acceptanceDuringDeliveryWinsAndCannotBeReopened() {
-        var token = new String[1];
-        doAnswer(
-                        call -> {
-                            token[0] = call.getArgument(1);
-                            return "<initial@test>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
         var original = send("accepted@example.com");
+        var token = fake.latest(original.email()).token();
         when(clock.instant()).thenReturn(now.plusSeconds(60));
-        doAnswer(
-                        call -> {
-                            acceptance.accept(
-                                    new MemberRegistrationRequest(
-                                            new InvitationLinkRequest(original.id(), token[0]),
-                                            "Member Name",
-                                            "Validpass!"),
-                                    null);
-                            return "<replacement@test>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
-        var result =
+        var queued =
                 invitations.resend(
                         "admin@example.com",
                         identity.current("admin@example.com").workspaceId(),
                         original.id());
-        assertThat(result.status()).isEqualTo("ACCEPTED");
-        assertThat(result.sentAt()).isEqualTo(original.sentAt());
-        assertThat(
-                        invitations
-                                .sent(
-                                        "admin@example.com",
-                                        identity.current("admin@example.com").workspaceId())
-                                .getFirst()
-                                .status())
-                .isEqualTo("ACCEPTED");
+        doAnswer(
+                        call -> {
+                            var message =
+                                    TestEmailDelivery.parse(
+                                            call.getArgument(0), call.getArgument(1));
+                            acceptance.accept(
+                                    new MemberRegistrationRequest(
+                                            new InvitationLinkRequest(original.id(), token),
+                                            "Member Name",
+                                            "Validpass!"),
+                                    null);
+                            fake.event(message, "email.delivered", clock.instant(), Map.of());
+                            return new ResendClient.Accepted(message.providerId());
+                        })
+                .when(mail)
+                .submit(eq(queued.emailReference()), any(byte[].class));
+        worker.runOnce();
+        var accepted = latest(original.email());
+        assertThat(accepted.status()).isEqualTo("ACCEPTED");
+        assertThat(accepted.sentAt()).isEqualTo(original.sentAt());
+        assertThat(accepted.deliveryStatus()).isEqualTo("DELIVERED");
         assertThat(
                         invitations.members(
                                 "admin@example.com",
@@ -546,12 +611,7 @@ class InvitationIntegrationTests {
                 .containsExactly(
                         new ActiveMemberView("Member Name", "accepted@example.com", "MEMBER"),
                         new ActiveMemberView("Ada", "admin@example.com", "OWNER"));
-        assertThatThrownBy(
-                        () ->
-                                invitations.resend(
-                                        "admin@example.com",
-                                        identity.current("admin@example.com").workspaceId(),
-                                        original.id()))
+        assertThatThrownBy(() -> resend(original.id(), original.email()))
                 .isInstanceOf(IdentityException.class);
     }
 
@@ -636,57 +696,32 @@ class InvitationIntegrationTests {
     }
 
     @Test
-    void concurrentResendDoesNotSubmitDuplicateAndOldLinkWorksDuringDelivery() throws Exception {
-        var token = new String[1];
-        doAnswer(
-                        call -> {
-                            token[0] = call.getArgument(1);
-                            return "<original@test>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
+    void concurrentResendQueuesOneReplacementAndOldLinkWorksDuringDelivery() throws Exception {
         var original = send("race@example.com");
+        var token = fake.latest(original.email()).token();
+        var workspace = identity.current("admin@example.com").workspaceId();
         when(clock.instant()).thenReturn(now.plusSeconds(60));
-        var entered = new CountDownLatch(1);
-        var release = new CountDownLatch(1);
-        doAnswer(
-                        call -> {
-                            entered.countDown();
-                            assertThat(release.await(10, TimeUnit.SECONDS)).isTrue();
-                            return "<replacement@test>";
-                        })
-                .when(mail)
-                .send(any(), anyString());
         try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            var first =
-                    pool.submit(
-                            () ->
-                                    invitations.resend(
-                                            "admin@example.com",
-                                            identity.current("admin@example.com").workspaceId(),
-                                            original.id()));
-            try {
-                assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
-                assertThat(
-                                acceptance
-                                        .preview(new InvitationLinkRequest(original.id(), token[0]))
-                                        .status())
-                        .isEqualTo("READY");
-                assertThatThrownBy(
-                                () ->
-                                        invitations.resend(
-                                                "admin@example.com",
-                                                identity.current("admin@example.com").workspaceId(),
-                                                original.id()))
-                        .isInstanceOfSatisfying(
-                                IdentityException.class,
-                                e -> assertThat(e.code()).isEqualTo("RESEND_IN_PROGRESS"));
-            } finally {
-                release.countDown();
-            }
-            assertThat(first.get(10, TimeUnit.SECONDS).status()).isEqualTo("SMTP_ACCEPTED");
+            Callable<String> request =
+                    () -> {
+                        try {
+                            return invitations
+                                    .resend("admin@example.com", workspace, original.id())
+                                    .deliveryStatus();
+                        } catch (IdentityException failure) {
+                            return failure.code();
+                        }
+                    };
+            var first = pool.submit(request);
+            var second = pool.submit(request);
+            assertThat(List.of(first.get(), second.get()))
+                    .containsExactlyInAnyOrder("PENDING", "RESEND_IN_PROGRESS");
         }
-        verify(mail, times(2)).send(any(), anyString());
+        assertThat(acceptance.preview(new InvitationLinkRequest(original.id(), token)).status())
+                .isEqualTo("READY");
+        worker.runOnce();
+        assertThat(latest(original.email()).deliveryStatus()).isEqualTo("DELIVERED");
+        verify(mail, times(2)).submit(any(), any(byte[].class));
     }
 
     @Test
