@@ -12,6 +12,20 @@ info:
     Initialization SQL creates bigint keys directly and requires a fresh schema without application
     tables or Liquibase history. Old IDs, links and refresh cookies are invalid after database reset.
 paths:
+  /api/webhooks/resend:
+    post:
+      operationId: recordResendNotification
+      summary: Record a signed Resend delivery notification.
+      description: Validates the raw body with svix-id, svix-timestamp and svix-signature. Acknowledges committed events and repeated notifications.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '204': { description: Event recorded }
+        '401': { description: Invalid or expired signature }
   /api/auth/social/providers:
     get:
       operationId: socialProviders
@@ -572,7 +586,7 @@ paths:
 
         its administrator. Pending invitations reserve neither membership nor capacity.
 
-        SENDING is persisted before SMTP; SMTP_ACCEPTED is success after relay acceptance
+        The production sender queues the invitation and returns SENDING. SMTP_ACCEPTED records provider acceptance
 
         and persistence, not guaranteed inbox delivery. FAILED remains retryable.
 
@@ -589,7 +603,7 @@ paths:
         $ref: "#/components/requestBodies/InvitationEmail"
       responses:
         "200":
-          description: SMTP_ACCEPTED, FAILED, or an already SENDING attempt.
+          description: Current invitation state, including SENDING for a queued email.
           content:
             application/json:
               schema:
@@ -1381,6 +1395,9 @@ components:
               format: date-time
             resending:
               type: boolean
+            deliveryStatus:
+              type: [string, "null"]
+              description: Latest email submission or delivery outcome for this invitation.
             deliveryFailed:
               type: boolean
     ErrorEnvelope:
@@ -1422,6 +1439,16 @@ components:
             - SMTP_ACCEPTED
             - FAILED
             - CANCELLED
+            - QUEUED
+            - ACCEPTED
+            - DELIVERED
+            - DELIVERY_DELAYED
+            - DELIVERY_FAILED
+            - BOUNCED
+            - SUPPRESSED
+            - COMPLAINED
+            - BLOCKED
+            - REVIEW
     Verification:
       type: object
       required:

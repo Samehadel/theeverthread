@@ -37,8 +37,9 @@ export const InvitationStore = signalStore(
           return api.request(row.email.trim(), action.status).pipe(
             tap((result) =>
               update(row.id, {
-                state:
-                  result.status === 'SMTP_ACCEPTED'
+                state: result.deliveryFailed
+                  ? 'error'
+                  : result.status === 'SMTP_ACCEPTED'
                     ? 'sent'
                     : result.status === 'FAILED'
                       ? 'error'

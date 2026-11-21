@@ -92,7 +92,10 @@ class SecurityConfiguration {
         return http.sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .securityContext(context -> context.securityContextRepository(contexts))
-                .csrf(config -> config.csrfTokenRepository(csrf))
+                .csrf(
+                        config ->
+                                config.csrfTokenRepository(csrf)
+                                        .ignoringRequestMatchers("/api/webhooks/resend"))
                 .requestCache(cache -> cache.disable())
                 .oauth2Login(
                         oauth ->
@@ -117,7 +120,9 @@ class SecurityConfiguration {
                                                                 "/login?social=PROVIDER_AUTHENTICATION_FAILED")))
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers(
+                                auth.requestMatchers(HttpMethod.POST, "/api/webhooks/resend")
+                                        .permitAll()
+                                        .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/status",
                                                 "/actuator/health",

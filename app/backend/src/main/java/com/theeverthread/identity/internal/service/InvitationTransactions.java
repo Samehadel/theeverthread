@@ -26,6 +26,7 @@ public class InvitationTransactions {
     private final InvitationRepository invitations;
     private final RegistrationLocks locks;
     private final Clock clock;
+    private final EmailLedger ledger;
     private final Validator validator;
     private final Environment configuration;
     private final WorkspaceAccess access;
@@ -315,6 +316,10 @@ public class InvitationTransactions {
                     case "SENDING" -> "Sending invitation. Please wait.";
                     default -> "Invitation is no longer pending.";
                 };
+        String delivery = ledger.status(true, invitation.getId(), "");
+        if (!delivery.isEmpty() && !"ACCEPTED".equals(invitation.getStatus()))
+            message =
+                    "Email delivery: " + delivery.toLowerCase(Locale.ROOT).replace('_', ' ') + ".";
         return new InvitationView(
                 invitation.getId(),
                 invitation.getEmail(),
@@ -324,6 +329,14 @@ public class InvitationTransactions {
                 invitation.getSentAt(),
                 resendAvailableAt(invitation),
                 invitation.getReplacementTokenHash() != null,
-                invitation.getFailureCode() != null);
+                invitation.getFailureCode() != null
+                        || Set.of(
+                                        "BOUNCED",
+                                        "DELIVERY_FAILED",
+                                        "BLOCKED",
+                                        "SUPPRESSED",
+                                        "COMPLAINED")
+                                .contains(delivery),
+                delivery.isEmpty() ? null : delivery);
     }
 }

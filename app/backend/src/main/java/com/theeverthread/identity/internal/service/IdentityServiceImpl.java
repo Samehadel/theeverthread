@@ -28,6 +28,8 @@ public class IdentityServiceImpl implements IdentityService {
     private final WorkspaceAccess workspaces;
     private final Clock clock;
     private final Validator validator;
+    private final Optional<QueuedEmail> queue;
+    private final EmailLedger ledger;
 
     public static String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
@@ -68,8 +70,20 @@ public class IdentityServiceImpl implements IdentityService {
         delivery.setRecipient(email);
         delivery.setStatus(EmailDeliveryStatus.PENDING);
         delivery.setNextAttemptAt(clock.instant());
-        emails.save(delivery);
+        emails.saveAndFlush(delivery);
+        enqueueVerification(account, delivery);
         return pending(account);
+    }
+
+    private void enqueueVerification(AccountEntity account, VerificationEmailEntity delivery) {
+        queue.ifPresent(
+                sender -> {
+                    sender.verification(
+                            account.getId(),
+                            account.getEmail(),
+                            clock.instant().plus(Duration.ofHours(24)));
+                    delivery.setNextAttemptAt(null);
+                });
     }
 
     static IdentityException emailInUse() {
@@ -103,9 +117,25 @@ public class IdentityServiceImpl implements IdentityService {
                     429,
                     "RESEND_COOLDOWN",
                     "Wait 60 seconds after the previous email before requesting another.");
-        if (delivery.getStatus() == EmailDeliveryStatus.SMTP_ACCEPTED) {
+        String state = deliveryState(delivery);
+        if (Set.of(
+                                "SMTP_ACCEPTED",
+                                "ACCEPTED",
+                                "DELIVERED",
+                                "DELIVERY_FAILED",
+                                "BOUNCED",
+                                "SUPPRESSED",
+                                "FAILED",
+                                "BLOCKED",
+                                "DELIVERY_DELAYED",
+                                "COMPLAINED",
+                                "REVIEW")
+                        .contains(state)
+                && (queue.isPresent()
+                        || delivery.getStatus() == EmailDeliveryStatus.SMTP_ACCEPTED)) {
             delivery.setStatus(EmailDeliveryStatus.PENDING);
             delivery.setNextAttemptAt(clock.instant());
+            enqueueVerification(account, delivery);
             account.setUpdatedAt(clock.instant());
         }
         return pending(account);
@@ -119,7 +149,13 @@ public class IdentityServiceImpl implements IdentityService {
                 delivery.getLastSentAt() == null
                         ? clock.instant()
                         : delivery.getLastSentAt().plusSeconds(60),
-                delivery.getStatus().name());
+                deliveryState(delivery));
+    }
+
+    private String deliveryState(VerificationEmailEntity delivery) {
+        return queue.isPresent()
+                ? ledger.status(false, delivery.getAccountId(), delivery.getStatus().name())
+                : delivery.getStatus().name();
     }
 
     @Override
@@ -137,20 +173,32 @@ public class IdentityServiceImpl implements IdentityService {
         locks.lock("email:" + email);
         var account = accounts.findById(id).orElseThrow(IdentityServiceImpl::invalidLink);
         var delivery = emails.findById(id).orElseThrow(IdentityServiceImpl::invalidLink);
+        boolean candidate =
+                token != null
+                        && token.matches("[A-Za-z0-9_-]{43}")
+                        && ledger.validCandidate(false, id, hash(token));
         if (token == null
                 || !token.matches("[A-Za-z0-9_-]{43}")
-                || delivery.getTokenHash() == null
-                || !MessageDigest.isEqual(
-                        hash(token).getBytes(StandardCharsets.US_ASCII),
-                        delivery.getTokenHash().getBytes(StandardCharsets.US_ASCII)))
+                || (!candidate
+                        && (delivery.getTokenHash() == null
+                                || !MessageDigest.isEqual(
+                                        hash(token).getBytes(StandardCharsets.US_ASCII),
+                                        delivery.getTokenHash()
+                                                .getBytes(StandardCharsets.US_ASCII)))))
             throw invalidLink();
-        if (!clock.instant().isBefore(delivery.getTokenExpiresAt()))
+        if (!candidate && !clock.instant().isBefore(delivery.getTokenExpiresAt()))
             throw new IdentityException(
                     400,
                     "EXPIRED_VERIFICATION",
                     "This link has expired. Request a new verification email.");
         if (account.isActive()) return new VerificationView("ALREADY_VERIFIED", null);
         if (account.getStatus() != AccountStatus.PENDING) throw invalidLink();
+        if (candidate) {
+            delivery.setTokenHash(hash(token));
+            if (delivery.getTokenExpiresAt() == null)
+                delivery.setTokenExpiresAt(clock.instant().plus(Duration.ofHours(24)));
+        }
+        ledger.cancel(false, id);
         account.setStatus(AccountStatus.ACTIVE);
         account.setUpdatedAt(clock.instant());
         workspaces.provisionDefault(account);
