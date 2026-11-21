@@ -16,8 +16,12 @@ done
 
 printf 'BACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n' "$1" "$2" > candidate.env
 compose() {
+  local overlays=()
+  if [[ -f /opt/theeverthread/monitoring.enabled ]]; then
+    overlays=(-f /home/ubuntu/monitoring/backend.compose.yaml)
+  fi
   docker compose --env-file /opt/theeverthread/secrets.env --env-file "$1" \
-    -f /opt/theeverthread/compose.yaml "${@:2}"
+    -f /opt/theeverthread/compose.yaml "${overlays[@]}" "${@:2}"
 }
 
 # Pull before changing the running application. Database image is managed separately.

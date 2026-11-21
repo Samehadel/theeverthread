@@ -1,0 +1,111 @@
+name: theeverthread-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=5GB
+    environment:
+      GOMEMLIMIT: 384MiB
+    mem_limit: 512m
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    # Cross-host scrapes need an outbound route; publish no Prometheus port.
+    networks: [default, telemetry]
+    secrets: [monitoring_ca, prometheus_certificate, prometheus_key]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:9090/-/ready']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:3000:3000
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_password
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: 'false'
+      GF_UNIFIED_ALERTING_ENABLED: 'false'
+      GOMEMLIMIT: 384MiB
+    mem_limit: 512m
+    secrets: [grafana_password]
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [default, telemetry]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:3000/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.1
+    restart: unless-stopped
+    command: [--config.file=/etc/blackbox/blackbox.yml]
+    volumes:
+      - ./blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [default, telemetry]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    environment:
+      GOMEMLIMIT: 40MiB
+    logging: *logging
+
+  monitoring-node:
+    image: prom/node-exporter:v1.12.1
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/host/root
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    environment:
+      GOMEMLIMIT: 64MiB
+    networks: [telemetry]
+    logging: *logging
+
+secrets:
+  monitoring_ca:
+    file: ./runtime/pki/prometheus/ca.pem
+  prometheus_certificate:
+    file: ./runtime/pki/prometheus/cert.pem
+  prometheus_key:
+    file: ./runtime/pki/prometheus/key.pem
+  grafana_password:
+    file: ./runtime/grafana_password
+
+networks:
+  telemetry:
+    internal: true
+
+volumes:
+  prometheus_data:
+  grafana_data:
