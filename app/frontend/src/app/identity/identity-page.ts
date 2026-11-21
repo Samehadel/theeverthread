@@ -95,8 +95,12 @@ export class IdentityPage {
   );
   readonly deliveryMessage = computed(() => {
     switch (this.store.pending()?.deliveryStatus) {
-      case 'SMTP_ACCEPTED':
+      case 'PROVIDER_ACCEPTED':
         return 'identity.pending';
+      case 'DELIVERED':
+        return 'identity.delivered';
+      case 'UNKNOWN':
+        return 'identity.deliveryUnknown';
       case 'FAILED':
         return 'identity.failedDelivery';
       case 'CANCELLED':
@@ -105,10 +109,8 @@ export class IdentityPage {
         return 'identity.queued';
     }
   });
-  readonly deliveryInProgress = computed(() =>
-    ['PENDING', 'SENDING', 'FAILED'].includes(
-      this.store.pending()?.deliveryStatus ?? '',
-    ),
+  readonly deliveryInProgress = computed(
+    () => this.store.pending()?.deliveryStatus === 'PENDING',
   );
   private verification: { id: string; token: string } | null = null;
   readonly invalidFragment = signal(false);
@@ -143,7 +145,11 @@ export class IdentityPage {
     const timer = setInterval(() => this.now.set(Date.now()), 1000);
     const deliveryTimer = setInterval(() => {
       const pending = this.store.pending();
-      if (pending && this.deliveryInProgress())
+      if (
+        pending &&
+        (this.deliveryInProgress() ||
+          pending.deliveryStatus === 'PROVIDER_ACCEPTED')
+      )
         this.store.refreshDelivery(pending.email);
     }, 5000);
     inject(DestroyRef).onDestroy(() => {

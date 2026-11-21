@@ -6,7 +6,14 @@ import { Invitation, InvitationApi } from './invitation.api';
 export interface InvitationRow {
   id: number;
   email: string;
-  state: 'editable' | 'sending' | 'sent' | 'error' | 'pending' | 'uncertain';
+  state:
+    | 'editable'
+    | 'sending'
+    | 'sent'
+    | 'queued'
+    | 'error'
+    | 'pending'
+    | 'uncertain';
   message: string;
 }
 export const InvitationStore = signalStore(
@@ -31,18 +38,26 @@ export const InvitationStore = signalStore(
       pipe(
         mergeMap((action) => {
           const row = store.rows().find((r) => r.id === action.id);
-          if (!row || row.state === 'sent' || row.state === 'sending')
+          if (
+            !row ||
+            row.state === 'sent' ||
+            row.state === 'sending' ||
+            (!action.status && ['queued', 'uncertain'].includes(row.state))
+          )
             return EMPTY;
           update(row.id, { state: 'sending', message: '' });
           return api.request(row.email.trim(), action.status).pipe(
             tap((result) =>
               update(row.id, {
                 state:
-                  result.status === 'SMTP_ACCEPTED'
+                  result.status === 'ACCEPTED' ||
+                  result.deliveryStatus === 'DELIVERED'
                     ? 'sent'
-                    : result.status === 'FAILED'
+                    : ['FAILED', 'CANCELLED'].includes(result.deliveryStatus)
                       ? 'error'
-                      : 'uncertain',
+                      : result.deliveryStatus === 'UNKNOWN'
+                        ? 'uncertain'
+                        : 'queued',
                 message: result.message,
               }),
             ),
@@ -100,7 +115,10 @@ export const InvitationStore = signalStore(
       loadHistory,
       updateEmail(id: number, email: string) {
         const row = store.rows().find((r) => r.id === id);
-        if (row && !['sent', 'sending', 'uncertain'].includes(row.state))
+        if (
+          row &&
+          !['sent', 'queued', 'sending', 'uncertain'].includes(row.state)
+        )
           update(id, { email, state: 'editable', message: '' });
       },
       invalid(id: number) {
@@ -114,7 +132,8 @@ export const InvitationStore = signalStore(
       },
       add(id: number) {
         const rows = store.rows();
-        if (rows.at(-1)?.id !== id || rows.at(-1)?.state !== 'sent') return;
+        const last = rows.at(-1);
+        if (last?.id !== id || !['sent', 'queued'].includes(last.state)) return;
         patchState(store, {
           rows: [
             ...rows,

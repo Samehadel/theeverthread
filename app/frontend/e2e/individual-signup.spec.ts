@@ -1,23 +1,16 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 
-const mailpit = process.env['MAILPIT_URL'] ?? 'http://127.0.0.1:8025';
+const mailbox = process.env['RESEND_STUB_URL'] ?? 'http://127.0.0.1:8025';
 async function verification(request: APIRequestContext, email: string) {
   let link = '';
   await expect
     .poll(
       async () => {
-        const result = await (
-          await request.get(
-            `${mailpit}/api/v1/search?query=${encodeURIComponent('to:' + email)}`,
-          )
-        ).json();
-        if (!result.messages?.length) return false;
-        const message = await (
-          await request.get(
-            `${mailpit}/api/v1/message/${result.messages[0].ID}`,
-          )
-        ).json();
-        link = /http[^\s]+\/verify#[^\s]+/.exec(message.Text)?.[0] ?? '';
+        const response = await request.get(
+          `${mailbox}/test/mailbox?recipient=${encodeURIComponent(email)}`,
+        );
+        const { text } = await response.json();
+        link = /http[^\s]+\/verify#[^\s]+/.exec(text ?? '')?.[0] ?? '';
         return !!link;
       },
       { timeout: 20000 },
@@ -184,4 +177,45 @@ test('provider denial has actionable feedback and linking requires explicit conf
     page.getByRole('heading', { name: 'Your accounts are connected' }),
   ).toBeVisible();
   expect(confirmed).toBe(true);
+});
+
+test('shows queued and confirmed invitation delivery on both owner screens', async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const email = `invite-owner-${Date.now()}@example.com`;
+  const recipient = `invite-recipient-${Date.now()}@example.com`;
+  await page.goto('/signup');
+  await page.getByLabel('Full name', { exact: true }).fill('Invitation Owner');
+  await page.getByLabel('Email address', { exact: true }).fill(email);
+  await page.getByLabel('Password', { exact: true }).fill('Validpass!');
+  await page.getByLabel('Confirm password', { exact: true }).fill('Validpass!');
+  await page
+    .getByRole('button', { name: 'Create account', exact: true })
+    .click();
+  await page.goto(await verification(request, email));
+  await expect(page).toHaveURL(/\/knowledge$/);
+
+  await page.goto('/workspace/invitations');
+  await page.getByLabel('Email address 1', { exact: true }).fill(recipient);
+  await page
+    .getByRole('button', { name: 'Send invitation', exact: true })
+    .click();
+  await expect(page.getByText('Email queued.', { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Add another invitation' }),
+  ).toBeVisible();
+  const check = page.getByRole('button', { name: 'Check send status' });
+  await expect(async () => {
+    if (await check.isVisible()) await check.click();
+    await expect(
+      page.getByText('The recipient’s mail server accepted the invitation.'),
+    ).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+
+  await page.getByRole('link', { name: 'Manage your team' }).click();
+  await expect(
+    page.getByRole('row').filter({ hasText: recipient }),
+  ).toContainText('Delivered to mail server');
 });

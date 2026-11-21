@@ -15,7 +15,7 @@ public interface VerificationEmailRepository extends JpaRepository<VerificationE
     @Query(
             """
             select e.accountId from VerificationEmailEntity e
-            where e.status in :statuses and e.nextAttemptAt <= :now
+            where e.latestEmailId is null and e.status in :statuses and e.nextAttemptAt <= :now
             order by e.nextAttemptAt, e.accountId
             """)
     List<Long> due(Collection<EmailDeliveryStatus> statuses, Instant now, Pageable page);

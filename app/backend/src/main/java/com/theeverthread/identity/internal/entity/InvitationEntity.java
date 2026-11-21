@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "TEAM_INVITATION")
@@ -43,11 +44,6 @@ public class InvitationEntity {
 
     private Instant sentAt;
 
-    @Column(length = 64)
-    private String replacementTokenHash;
-
-    private Instant replacementExpiresAt;
-
     private Instant replacementAttemptedAt;
 
     private Instant acceptedAt;
@@ -55,9 +51,5 @@ public class InvitationEntity {
     @Column(length = 64)
     private String acceptedTokenHash;
 
-    @Column(length = 255)
-    private String smtpMessageId;
-
-    @Column(length = 50)
-    private String failureCode;
+    private UUID latestEmailId;
 }

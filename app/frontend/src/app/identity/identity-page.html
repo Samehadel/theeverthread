@@ -446,15 +446,7 @@
           @if (isRegistration && store.pending()) {
             <div class="delivery-card" aria-live="polite">
               <span class="delivery-icon" aria-hidden="true">✉</span>
-              <h2>
-                {{
-                  t(
-                    store.pending()?.deliveryStatus === "SMTP_ACCEPTED"
-                      ? "identity.checkEmail"
-                      : "identity.deliveryQueued"
-                  )
-                }}
-              </h2>
+              <h2>{{ t("identity.deliveryQueued") }}</h2>
               <p>{{ t(deliveryMessage()) }}</p>
             </div>
           }

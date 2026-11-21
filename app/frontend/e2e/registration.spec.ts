@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext, Page } from '@playwright/test';
-const mailpit = process.env['MAILPIT_URL'] ?? 'http://127.0.0.1:8025';
+const mailbox = process.env['RESEND_STUB_URL'] ?? 'http://127.0.0.1:8025';
 const password = 'Validpass!';
 async function openAccount(page: Page) {
   const navigation = page.getByRole('button', { name: 'Open navigation' });
@@ -24,14 +24,10 @@ async function latestLink(
     .poll(
       async () => {
         const response = await request.get(
-          `${mailpit}/api/v1/search?query=${encodeURIComponent('to:' + email)}`,
+          `${mailbox}/test/mailbox?recipient=${encodeURIComponent(email)}`,
         );
-        const list = await response.json();
-        if (!list.messages?.length) return false;
-        const message = await (
-          await request.get(`${mailpit}/api/v1/message/${list.messages[0].ID}`)
-        ).json();
-        link = /http[^\s]+\/verify#[^\s]+/.exec(message.Text)?.[0] ?? '';
+        const { text } = await response.json();
+        link = /http[^\s]+\/verify#[^\s]+/.exec(text ?? '')?.[0] ?? '';
         return !!link && link !== previous;
       },
       { timeout: 15000 },
@@ -108,6 +104,11 @@ test('landing registration, local email verification, password login and logout'
     email,
   );
   const link = await latestLink(request, email);
+  await expect(
+    page.getByText('Your mail server accepted the verification email.', {
+      exact: false,
+    }),
+  ).toBeVisible({ timeout: 15000 });
   await page.goto('/login');
   await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.getByText('Enter a valid email address.')).toHaveCSS(

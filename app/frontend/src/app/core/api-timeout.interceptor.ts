@@ -4,7 +4,6 @@ import { timeout } from 'rxjs';
 export const apiTimeoutInterceptor: HttpInterceptorFn = (request, next) => {
   if (!request.url.startsWith('/api/')) return next(request);
 
-  // Registration may wait for bounded SMTP connection, write, and response timeouts.
   const deadline =
     request.url === '/api/knowledge/tickets/refine'
       ? 50000

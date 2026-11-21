@@ -8,7 +8,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-/** One reusable delivery/verification record per account; credentials never live on the account. */
+/** The account’s current verification link and latest email reference. */
 @Entity
 @Table(name = "VERIFICATION_EMAIL")
 @Getter
@@ -24,21 +24,12 @@ public class VerificationEmailEntity {
     @Column(nullable = false, length = 20)
     private EmailDeliveryStatus status;
 
-    @Column(nullable = false)
-    private int attempts;
-
-    private Instant lastAttemptAt;
+    // Legacy scheduling fields are read during the SMTP cutover.
     private Instant nextAttemptAt;
-    private int consecutiveFailures;
-    private UUID attemptId;
 
-    @Column(length = 255)
-    private String smtpMessageId;
+    private UUID latestEmailId;
 
     private Instant lastSentAt;
-
-    @Column(length = 50)
-    private String failureCode;
 
     @Column(length = 64)
     private String tokenHash;

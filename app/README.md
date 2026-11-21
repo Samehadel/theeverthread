@@ -102,25 +102,6 @@ If changing `DB_PORT`, change the port in `DB_URL` too. If changing `SERVER_PORT
 
 Spring Security permits the status/probe endpoints and the documented registration and authentication endpoints. Mutations require CSRF; company access requires an authenticated account and active account/organization statuses. Unknown endpoints remain denied and no default development user is generated. The handwritten OpenAPI contract is `backend/src/main/resources/openapi.yaml`; it is packaged as a resource, not exposed as a public documentation endpoint.
 
-## Verification email scheduling
-
-Verification delivery uses JDBC ShedLock and the Liquibase-managed `SHEDLOCK` table.
-The scheduler calls the worker through its Spring proxy so `@SchedulerLock` also
-protects direct worker invocations. Competing invocations skip work; the lease is
-released after completion or failure. Database time controls lease expiry.
-
-`theeverthread.registration.delivery.enabled=false` disables automatic delivery, and
-`theeverthread.registration.delivery.delay` defaults to 5000 milliseconds.
-`theeverthread.registration.delivery.lock-at-most-for` defaults to `10m`; keep it longer
-than the maximum duration of a 25-email batch, including SMTP and database calls.
-An invocation still running after lease expiry can overlap another worker.
-
-When upgrading from the advisory-lock worker, stop or disable delivery on all old
-instances before enabling the new worker: the two locking mechanisms do not
-coordinate. Liquibase creates the lock table at startup. Rolling back the code can
-leave this additive table in place; dropping it requires all ShedLock workers to
-be stopped.
-
 ## Application version
 
 The repository root `VERSION` is authoritative. Gradle reads it; frontend package
@@ -212,111 +193,101 @@ This follows the product owner's 2026-10-04 correction to BTF-5's earlier
 no-company-status wording. Architecture baseline: `0765baaa675be6232b9df9c025d415dca1ab3f49`;
 implementation decisions are in architecture ADR 0005.
 
-For local email capture, run `docker compose up -d --wait` with the supplied
-Mailpit service. Open http://127.0.0.1:8025 to read verification emails.
-For local HTTP only, set `SESSION_COOKIE_SECURE=false` in the backend environment.
-Set `PUBLIC_ORIGIN` to the browser origin (default http://127.0.0.1:4200).
-`SMTP_HOST` defaults to 127.0.0.1 and `SMTP_PORT` to 1025. Production requires a
-configured SMTP sender and credentials (`MAIL_FROM`, `SMTP_USER`, `SMTP_PASSWORD`,
-`SMTP_AUTH=true`, `SMTP_STARTTLS=true`) and HTTPS with secure session cookies.
-The deployment compose file must receive these settings before public release.
+## Transactional email
 
-Email sending runs in a background worker every five seconds, in batches of 25.
-A PostgreSQL session advisory lock on a dedicated connection prevents overlapping
-runs across application instances. Use direct PostgreSQL or session pooling;
-transaction-mode PgBouncer cannot hold this lock. Allow at least two connections
-per worker instance. `THEEVERTHREAD_REGISTRATION_DELIVERY_ENABLED=false` disables the
-scheduler; `THEEVERTHREAD_REGISTRATION_DELIVERY_DELAY` sets its interval in milliseconds.
+Registration and workspace invitation requests save their email obligations in the
+same PostgreSQL transaction as their account or invitation changes. A background
+worker submits queued mail to Resend every five seconds. The scheduler can be
+disabled with `THEEVERTHREAD_REGISTRATION_DELIVERY_ENABLED=false` and its interval
+set with `THEEVERTHREAD_REGISTRATION_DELIVERY_DELAY` in milliseconds.
 
-The additive migration converts existing SENT records to SMTP_ACCEPTED and schedules
-existing PENDING/FAILED records. Stop old application instances before applying it:
-the earlier application cannot read the new delivery statuses.
+Each email has one stable request ID and an encrypted copy of its Resend payload
+until submission ends. Automatic retries reuse the same ID and bytes for up to
+23 hours from the first attempt. Resend retains idempotency keys for 24 hours.
+An unresolved submission stops at the deadline with an unknown outcome. A confirmed
+rejection or exhaustion after known rejections produces a failure. The application
+tracks delivery after acceptance through signed webhooks and a periodic lookup
+for up to seven days. A later signed outcome can resolve an unknown status.
 
-States are PENDING, SENDING, SMTP_ACCEPTED, FAILED, and CANCELLED. The worker commits
-SENDING before contacting SMTP. SMTP_ACCEPTED means the relay accepted the message,
-**not confirmed inbox delivery**. SMTP_MESSAGE_ID supports provider-log correlation.
-The UI polls status and distinguishes queued, failed/retrying, and accepted.
-Failures record a safe code and retry after 60, 120, 240, 480, then 900 seconds,
-with later delays capped at 900 seconds. Repeated requests coalesce while queued
-or retrying. An accepted replacement rotates the token; a failure preserves the
-previous valid token. Acceptance starts the 60-second resend cooldown; links expire
-after 24 hours. Ineligible registrations are cancelled.
+The latest email is tracked independently of the account or invitation. A
+confirmed replacement starts a new 24-hour verification or seven-day invitation
+link lifetime. Until confirmation, the previous link retains its original expiry.
+A recipient can use a link that reached them while delivery confirmation is
+pending. Completing verification or accepting an invitation takes precedence
+over subsequent email events.
 
-The worker never picks up SENDING rows. A crash or database failure after SMTP
-submission may leave one for investigation. Check provider logs and stop all
-workers before manually returning a confirmed abandoned attempt to FAILED with
-NEXT_ATTEMPT_AT set to CURRENT_TIMESTAMP. Never reset a live attempt. SMTP and
-PostgreSQL cannot commit atomically; an ambiguous network failure can cause duplicate
-messages on retry. No raw token is stored for replay.
+### Resend configuration
 
-Repeated submission never overwrites an existing pending account's profile. Hourly
-cleanup removes pending data older than 30 days in batches of 100, excluding SENDING.
-Member acceptance, invitation management, member views, password recovery, and ingress abuse controls remain
-separate release dependencies.
+Set `RESEND_API_KEY` to a key with permission to send and retrieve emails, and
+`MAIL_FROM` to an address on a verified Resend domain. Set `PUBLIC_ORIGIN` to
+the HTTPS browser origin. Supply `EMAIL_PAYLOAD_KEY` as a base64-encoded 32-byte
+secret generated with `openssl rand -base64 32`. Keep the same key on all
+application instances and across restarts. Drain queued submissions before
+changing this key.
 
-### Brevo SMTP configuration
+Register `POST /api/webhooks/resend` on the public origin in Resend. Subscribe to
+`email.sent`, `email.delivery_delayed`, `email.delivered`, `email.failed`,
+`email.bounced`, and `email.suppressed`. Store its signing secret in
+`RESEND_WEBHOOK_SECRET`. Use full-access credentials for retrieval and keep them in
+the deployment secret store. [Resend keys](https://resend.com/changelog/new-api-key-permissions)
+and [webhook verification](https://resend.com/docs/webhooks/verify-webhooks-requests).
 
-Supply these in the backend process environment (or source your untracked `app/.env`
-before starting Java; Spring Boot does not automatically load that file):
+Stop the previous release before rolling out the migration. Previously usable
+links keep their expiry. The new worker imports pending verification work and
+known legacy failures that were scheduled to retry. Legacy accepted or in-flight
+submissions with no definitive outcome are recorded as unknown. A cross-provider
+automatic replay would have no deduplication guarantee.
 
-```dotenv
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USER=<Brevo SMTP login>
-SMTP_PASSWORD=<Brevo SMTP key, not the API key>
-SMTP_AUTH=true
-SMTP_STARTTLS=true
-MAIL_FROM=<sender address verified in Brevo>
-PUBLIC_ORIGIN=http://127.0.0.1:4200
-SESSION_COOKIE_SECURE=false
+### Trace an individual email
+
+Use the API's `emailReference` or look up the recipient and creation time in
+`EMAIL_OUTBOX`. Check `PROVIDER_ID` in Resend for the provider timeline and query
+the recorded submission attempts, poll results, and webhook outcomes in PostgreSQL.
+
+```sql
+SELECT id, status, created_at, accepted_at, provider_id, failure_code
+FROM email_outbox
+WHERE recipient = :normalized_recipient
+ORDER BY created_at DESC;
+
+SELECT occurred_at, recorded_at, kind, reason
+FROM email_delivery_event
+WHERE email_id = :email_reference
+ORDER BY recorded_at, event_key;
 ```
 
-Use HTTPS and `SESSION_COOKIE_SECURE=true` outside local HTTP development. The SMTP
-login and MAIL_FROM are different settings. The default `no-reply@theeverthread.local`
-is rejected for remote SMTP with `SMTP_FROM_NOT_CONFIGURED`. Authentication errors
-use `SMTP_AUTHENTICATION_FAILED`; other submission failures use `SMTP_DELIVERY_FAILED`.
-Fix configuration and restart; FAILED rows retry when due.
+Delivered means the recipient's mail server accepted the email. Inbox placement
+is determined by the receiving provider.
 
-If Brevo receives a message but does not deliver it, inspect **Transactional > Logs**
-by recipient/time or SMTP_MESSAGE_ID for bounce, block, and suppression results.
-Check sender/domain verification and whether transactional sending is active.
-Accepted submissions are not retried automatically because downstream delivery
-cannot be inferred from SMTP. Provider webhooks are outside this change. References:
-[Brevo SMTP troubleshooting](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP)
-and [transactional logs](https://help.brevo.com/hc/en-us/articles/360021533839-Manage-your-transactional-logs-and-email-previews).
+### Local delivery and browser tests
 
-The API contract includes CSRF, session login/logout, and the registration routes.
-Run `./gradlew check bootJar` for PostgreSQL integration and module checks, and
-frontend `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:e2e`.
-Onboarding browser tests require Mailpit (HTTP API defaults to localhost:8025;
-override `MAILPIT_URL`) and a fresh disposable database. They send only local
-captured test emails.
+The local Resend-compatible test server captures outgoing emails in memory and
+posts signed delivery notifications to the backend. Start it from `app/` in a
+separate terminal after copying `.env.example`:
+
+```bash
+node dev/resend-stub.mjs
+```
+
+Inspect a local verification email at
+`http://127.0.0.1:8025/test/mailbox?recipient=someone%40example.com`.
+With a fresh disposable database, run `npm run test:e2e` from `app/frontend/`.
+If you change ports, set `RESEND_STUB_PORT` on the stub, `RESEND_API_URL` on the
+backend, and `RESEND_STUB_URL` for browser tests. Set `BACKEND_URL` on the stub and
+browser runner if you change the backend port.
 
 ## Team invitations
 
-Verified administrators can open **Invite a colleague** from the company home.
-`/company/invitations` sends one email per row. A successful relay submission locks
-its row and exposes **Add another invitation**; failed sends remain editable.
-**Previous invitations** loads saved company records each time the page opens,
-including after navigation or refresh. Older records are available with **Load more
-invitations**; this section is read-only and never resends email.
-Uncertain responses offer **Check send status** rather than an automatic resend.
-SMTP acceptance does not guarantee inbox delivery.
+Workspace owners can invite one recipient at a time and view or resend eligible
+invitations from **Manage your team**. The form locks a queued row and offers
+**Add another invitation**. Owners can check delivery status from the form or
+refresh it on **Sent invitations**.
 
-`INVITATION_MAX_ACTIVE_ACCOUNTS` sets the default active-account cap (10). A positive
-`ORGANIZATION.MAX_ACTIVE_ACCOUNTS` overrides it for an individual organization.
-Active administrators count toward the cap; pending invitations do not. Invitation
-links expire after seven days; administrator verification retains its 24-hour expiry.
-HTML invitation emails are stored in backend `resources/mail/team-invitation.html`
-and use the same SMTP and PUBLIC_ORIGIN configuration as verification emails.
-
-The invitation link opens member registration at `/invitation/accept`. Recipients
-explicitly accept and create their member account, then sign in automatically.
-Pending-management navigation explains that resend/revoke tools arrive with BTF-8.
-Acceptance cancels any unfinished administrator signup for the invited email and invalidates its verification links.
-Used links provide a password-login next step and cannot repeat registration. Provider submission and database commits cannot be atomic;
-SENDING records left by a crash or persistence failure require operator investigation
-before retry. See [invitation acceptance](../architecture/backend/invitation-acceptance.md).
+`INVITATION_MAX_ACTIVE_ACCOUNTS` sets the default cap of 10 active members,
+including the owner. A positive `WORKSPACE.MAX_ACTIVE_ACCOUNTS` overrides it.
+Pending invitations reserve no slots. The recipient explicitly accepts at
+`/invitation/accept`, using an existing account or completing registration.
+Used links direct recipients to sign in.
 
 ## Session expiry recovery
 
@@ -367,8 +338,7 @@ versioning, and selective legacy reclassification runbook are documented in
 [Automatic capture classification](../docs/CLASSIFICATION.md).
 
 Public Actuator probes are `/actuator/health/liveness` and
-`/actuator/health/readiness` (database readiness). Aggregate `/actuator/health`
-also checks configured SMTP. `/actuator/info`, `/actuator/metrics`, and
+`/actuator/health/readiness` (database readiness). `/actuator/info`, `/actuator/metrics`, and
 `/actuator/prometheus` are denied to ordinary product accounts; workspace ownership grants no platform operator access. JVM and HTTP metrics
 are available; `theeverthread.knowledge.classification` records completed and failed
 classification attempts. The deployment proxy forwards these protected endpoints;

@@ -15,8 +15,11 @@ public interface InvitationRepository extends JpaRepository<InvitationEntity, Lo
 
     @Query(
             "select i from InvitationEntity i where i.workspace.id = :workspaceId and"
-                    + " (i.status in ('FAILED', 'ACCEPTED') or"
-                    + " (i.status = 'SMTP_ACCEPTED' and i.expiresAt > :now))"
+                    + " (i.status in ('PENDING', 'FAILED', 'ACCEPTED') or"
+                    + " (i.status = 'READY' and (i.expiresAt > :now or exists"
+                    + " (select 1 from OutboundEmail e where e.id = i.latestEmailId"
+                    + " and e.status in ('PENDING', 'PROVIDER_ACCEPTED', 'FAILED', 'UNKNOWN')"
+                    + " and e.tokenHash is not null))))"
                     + " order by coalesce(i.sentAt, i.attemptedAt) desc, i.id desc")
     List<InvitationEntity> managementRecords(Long workspaceId, java.time.Instant now);
 

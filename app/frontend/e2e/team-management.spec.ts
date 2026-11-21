@@ -14,8 +14,9 @@ for (const viewport of [
       const rows = Array.from({ length: 30 }, (_, index) => ({
         id: String(index),
         email: `person${index}@example.com`,
-        status:
-          index === 0 ? 'ACCEPTED' : index === 1 ? 'FAILED' : 'SMTP_ACCEPTED',
+        status: index === 0 ? 'ACCEPTED' : index === 1 ? 'PENDING' : 'READY',
+        deliveryStatus: index === 1 ? 'FAILED' : 'DELIVERED',
+        resendEligible: index !== 0,
         sentAt: index === 1 ? null : sentAt,
         expiresAt,
         resendAvailableAt:
@@ -64,6 +65,7 @@ for (const viewport of [
               data: {
                 ...rows[3],
                 deliveryFailed: true,
+                deliveryStatus: 'FAILED',
                 message: 'Delivery failed. The previous link remains valid.',
               },
             },

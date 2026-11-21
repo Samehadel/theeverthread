@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.*;
 
-/** Short transactions on either side of SMTP, with no network operation inside a transaction. */
+/** Persists invitation state and the email obligation in a single transaction. */
 @Service
 @RequiredArgsConstructor
 public class InvitationTransactions {
@@ -30,8 +30,8 @@ public class InvitationTransactions {
     private final Environment configuration;
     private final WorkspaceAccess access;
     private final MembershipRepository memberships;
-
-    public record Claim(InvitationView view, String workspaceName, String administratorName) {}
+    private final OutboundEmailRepository outboundEmails;
+    private final EmailOutbox outbox;
 
     private MembershipEntity administrator(String email, Long workspaceId) {
         return access.require(email, workspaceId, true);
@@ -47,71 +47,45 @@ public class InvitationTransactions {
     }
 
     @Transactional
-    public Claim claim(String actor, Long workspaceId, InvitationRequest request, String token) {
+    public InvitationView send(String actor, Long workspaceId, InvitationRequest request) {
         var admin = administrator(actor, workspaceId);
         String email = recipient(request);
         // Acceptance must acquire these locks in the same order.
         locks.lock("email:" + email);
         locks.lock("workspace:" + admin.getWorkspace().getId());
         requireEligibleRecipient(admin, email);
-        var existing =
-                invitations
-                        .findByWorkspaceIdAndEmail(admin.getWorkspace().getId(), email)
-                        .orElse(null);
-        if (existing != null && existing.getReplacementTokenHash() != null) {
-            throw new IdentityException(
-                    409,
-                    "RESEND_IN_PROGRESS",
-                    "A resend is already in progress. Refresh the sent invitations before"
-                            + " retrying.");
-        }
-        if (existing != null && "ACCEPTED".equals(existing.getStatus())) {
-            throw new IdentityException(
-                    409, "INVITATION_USED", "This invitation has already been accepted.");
-        }
-        if (existing != null && "SENDING".equals(existing.getStatus())) {
-            return new Claim(view(existing), null, null);
-        }
-        if (existing != null
-                && "SMTP_ACCEPTED".equals(existing.getStatus())
-                && clock.instant().isBefore(existing.getExpiresAt())) {
-            throw new IdentityException(409, "INVITATION_PENDING", "Invitation already pending");
+        var existing = invitations.findByWorkspaceIdAndEmail(workspaceId, email).orElse(null);
+        if (existing != null) {
+            if ("ACCEPTED".equals(existing.getStatus())) {
+                throw new IdentityException(
+                        409, "INVITATION_USED", "This invitation has already been accepted.");
+            }
+            var latest = latest(existing);
+            if (!"REVOKED".equals(existing.getStatus())
+                    && (hasUsableLink(existing) || hasProvisionalLink(existing, latest))) {
+                throw new IdentityException(
+                        409, "INVITATION_PENDING", "Invitation already pending");
+            }
+            if (inFlight(latest) && !"REVOKED".equals(existing.getStatus())) {
+                return view(existing, latest);
+            }
         }
         requireCapacity(admin);
         var invitation = existing == null ? new InvitationEntity() : existing;
+        if (existing != null && !"REVOKED".equals(invitation.getStatus())) {
+            checkCooldown(invitation, latest(invitation));
+        }
         invitation.setWorkspace(admin.getWorkspace());
         invitation.setEmail(email);
         invitation.setAdministratorId(admin.getAccount().getId());
         invitation.setAdministratorName(admin.getAccount().getFullName());
-        invitation.setStatus("SENDING");
-        invitation.setTokenHash(IdentityServiceImpl.hash(token));
+        invitation.setStatus("PENDING");
+        invitation.setTokenHash(null);
         invitation.setAttemptedAt(clock.instant());
         invitation.setExpiresAt(clock.instant().plus(Duration.ofDays(7)));
         invitation.setSentAt(null);
-        invitation.setSmtpMessageId(null);
-        invitation.setFailureCode(null);
         invitations.saveAndFlush(invitation);
-        return new Claim(
-                view(invitation), admin.getWorkspace().getName(), admin.getAccount().getFullName());
-    }
-
-    @Transactional
-    public InvitationView complete(Long id, String token, String messageId, String failure) {
-        locks.lock("email:" + invitations.emailForId(id).orElseThrow());
-        var invitation = invitations.findById(id).orElseThrow();
-        if (!"SENDING".equals(invitation.getStatus())
-                || !IdentityServiceImpl.hash(token).equals(invitation.getTokenHash())) {
-            throw new IllegalStateException("Invitation attempt changed");
-        }
-        invitation.setStatus(failure == null ? "SMTP_ACCEPTED" : "FAILED");
-        invitation.setFailureCode(failure);
-        invitation.setSmtpMessageId(messageId);
-        if (failure == null) {
-            invitation.setSentAt(clock.instant());
-        } else {
-            invitation.setTokenHash(null);
-        }
-        return view(invitation);
+        return queue(invitation, admin, null);
     }
 
     private void requireEligibleRecipient(MembershipEntity admin, String email) {
@@ -174,89 +148,44 @@ public class InvitationTransactions {
                 .toList();
     }
 
-    /** Reserves a replacement without changing the current link or its acceptance state. */
     @Transactional
-    public Claim claimResend(String actor, Long workspaceId, Long id, String token) {
+    public InvitationView resend(String actor, Long workspaceId, Long id) {
         var admin = administrator(actor, workspaceId);
         String email = invitations.emailForId(id).orElseThrow(this::notFound);
         locks.lock("email:" + email);
-        locks.lock("workspace:" + admin.getWorkspace().getId());
+        locks.lock("workspace:" + workspaceId);
         var invitation = invitations.findById(id).orElseThrow(this::notFound);
-        if (!invitation.getWorkspace().getId().equals(admin.getWorkspace().getId())) {
+        if (!invitation.getWorkspace().getId().equals(workspaceId)) {
             throw notFound();
         }
-        if (!("FAILED".equals(invitation.getStatus())
-                || ("SMTP_ACCEPTED".equals(invitation.getStatus())
-                        && clock.instant().isBefore(invitation.getExpiresAt())))) {
+        var latest = latest(invitation);
+        if ("ACCEPTED".equals(invitation.getStatus())
+                || "REVOKED".equals(invitation.getStatus())
+                || (!canResend(invitation, latest) && !inFlight(latest))) {
             throw new IdentityException(
                     409, "INVITATION_UNUSABLE", "This invitation cannot be resent.");
         }
         requireEligibleRecipient(admin, email);
         requireCapacity(admin);
-        if (invitation.getReplacementTokenHash() != null) {
+        if (inFlight(latest)) {
             throw new IdentityException(
-                    409,
-                    "RESEND_IN_PROGRESS",
-                    "A resend is already in progress. Refresh the sent invitations before"
-                            + " retrying.");
+                    409, "RESEND_IN_PROGRESS", "An email is already queued for this invitation.");
         }
-        if (clock.instant().isBefore(resendAvailableAt(invitation))) {
-            throw new IdentityException(
-                    409, "RESEND_COOLDOWN", "Please wait 60 seconds between invitation sends.");
-        }
-        invitation.setReplacementTokenHash(IdentityServiceImpl.hash(token));
-        invitation.setReplacementAttemptedAt(clock.instant());
-        invitation.setReplacementExpiresAt(clock.instant().plus(Duration.ofDays(7)));
-        var current = view(invitation);
-        var replacement =
-                new InvitationView(
-                        current.id(),
-                        current.email(),
-                        current.status(),
-                        invitation.getReplacementExpiresAt(),
-                        current.message());
-        return new Claim(
-                replacement, admin.getWorkspace().getName(), admin.getAccount().getFullName());
+        checkCooldown(invitation, latest);
+        return queue(invitation, admin, latest == null ? null : latest.getSeriesId());
     }
 
-    /** Serializes promotion with acceptance; an accepted invitation can never be reopened. */
-    @Transactional
-    public InvitationView completeResend(Long id, String token, String messageId, String failure) {
-        locks.lock("email:" + invitations.emailForId(id).orElseThrow(this::notFound));
-        var invitation = invitations.findById(id).orElseThrow(this::notFound);
-        locks.lock("workspace:" + invitation.getWorkspace().getId());
-        if (!IdentityServiceImpl.hash(token).equals(invitation.getReplacementTokenHash())) {
-            throw new IllegalStateException("Invitation replacement changed");
-        }
-        if (!"ACCEPTED".equals(invitation.getStatus()) && failure == null) {
-            invitation.setTokenHash(invitation.getReplacementTokenHash());
-            invitation.setExpiresAt(invitation.getReplacementExpiresAt());
-            invitation.setSentAt(clock.instant());
-            invitation.setSmtpMessageId(messageId);
-            invitation.setStatus("SMTP_ACCEPTED");
-        }
-        invitation.setReplacementTokenHash(null);
-        invitation.setReplacementExpiresAt(null);
-        invitation.setFailureCode(failure);
-        var result = view(invitation);
-        String message =
-                "ACCEPTED".equals(invitation.getStatus())
-                        ? "This invitation was accepted while the resend was in progress."
-                        : failure == null
-                                ? "Invitation resent successfully."
-                                : "The replacement could not be confirmed. The previous link and"
-                                        + " expiry are unchanged. Check the recipient address and"
-                                        + " retry after 60 seconds.";
-        return new InvitationView(
-                result.id(),
-                result.email(),
-                result.status(),
-                result.expiresAt(),
-                message,
-                result.sentAt(),
-                result.resendAvailableAt(),
-                result.resending(),
-                failure != null);
+    private InvitationView queue(
+            InvitationEntity invitation, MembershipEntity admin, UUID seriesId) {
+        var id =
+                outbox.invitation(
+                        invitation.getId(),
+                        seriesId,
+                        invitation.getEmail(),
+                        admin.getWorkspace().getName(),
+                        admin.getAccount().getFullName());
+        invitation.setLatestEmailId(id);
+        return view(invitation);
     }
 
     private IdentityException notFound() {
@@ -264,16 +193,58 @@ public class InvitationTransactions {
                 404, "INVITATION_NOT_FOUND", "No invitation was found in your workspace.");
     }
 
-    private Instant resendAvailableAt(InvitationEntity invitation) {
-        Instant latest = invitation.getAttemptedAt();
-        if (invitation.getSentAt() != null && invitation.getSentAt().isAfter(latest)) {
-            latest = invitation.getSentAt();
+    private OutboundEmail latest(InvitationEntity invitation) {
+        return invitation.getLatestEmailId() == null
+                ? null
+                : outboundEmails.findById(invitation.getLatestEmailId()).orElseThrow();
+    }
+
+    private boolean hasUsableLink(InvitationEntity invitation) {
+        return "READY".equals(invitation.getStatus())
+                && clock.instant().isBefore(invitation.getExpiresAt());
+    }
+
+    private boolean inFlight(OutboundEmail email) {
+        return email != null && email.getStatus() == OutboundEmail.Status.PENDING;
+    }
+
+    private boolean canResend(InvitationEntity invitation, OutboundEmail latest) {
+        if (inFlight(latest)
+                || "ACCEPTED".equals(invitation.getStatus())
+                || "REVOKED".equals(invitation.getStatus())) {
+            return false;
         }
-        if (invitation.getReplacementAttemptedAt() != null
-                && invitation.getReplacementAttemptedAt().isAfter(latest)) {
-            latest = invitation.getReplacementAttemptedAt();
+        return hasUsableLink(invitation)
+                || "FAILED".equals(invitation.getStatus())
+                || ("PENDING".equals(invitation.getStatus()) && latest != null)
+                || hasProvisionalLink(invitation, latest);
+    }
+
+    private boolean hasProvisionalLink(InvitationEntity invitation, OutboundEmail latest) {
+        return latest != null
+                && latest.getSeriesId() != null
+                && outboundEmails.hasProvisionalInvitation(
+                        latest.getSeriesId(),
+                        clock.instant().minus(Duration.ofDays(7)),
+                        invitation.getSentAt() == null ? Instant.EPOCH : invitation.getSentAt());
+    }
+
+    private Instant resendAvailableAt(InvitationEntity invitation, OutboundEmail email) {
+        Instant when =
+                IdentityServiceImpl.later(invitation.getAttemptedAt(), invitation.getSentAt());
+        when = IdentityServiceImpl.later(when, invitation.getReplacementAttemptedAt());
+        if (email != null) {
+            when = IdentityServiceImpl.later(when, email.getCreatedAt());
+            when = IdentityServiceImpl.later(when, email.getAcceptedAt());
         }
-        return latest.plusSeconds(60);
+        return when.plusSeconds(60);
+    }
+
+    private void checkCooldown(InvitationEntity invitation, OutboundEmail latest) {
+        if (clock.instant().isBefore(resendAvailableAt(invitation, latest))) {
+            throw new IdentityException(
+                    429, "RESEND_COOLDOWN", "Please wait 60 seconds between invitation sends.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -307,23 +278,45 @@ public class InvitationTransactions {
     }
 
     private InvitationView view(InvitationEntity invitation) {
+        return view(invitation, latest(invitation));
+    }
+
+    private InvitationView view(InvitationEntity invitation, OutboundEmail latest) {
+        var deliveryStatus = latest == null ? OutboundEmail.Status.UNKNOWN : latest.getStatus();
+        String status = invitation.getStatus();
         String message =
-                switch (invitation.getStatus()) {
-                    case "SMTP_ACCEPTED" ->
-                            "Invitation sent. The email service accepted it for delivery.";
-                    case "FAILED" -> "The email could not be sent. Check the address and retry.";
-                    case "SENDING" -> "Sending invitation. Please wait.";
-                    default -> "Invitation is no longer pending.";
+                switch (deliveryStatus) {
+                    case PENDING ->
+                            "Email queued. Temporary sending failures are retried automatically.";
+                    case PROVIDER_ACCEPTED ->
+                            "The email provider accepted the invitation. Delivery is pending.";
+                    case DELIVERED -> "The recipient’s mail server accepted the invitation.";
+                    case FAILED ->
+                            hasUsableLink(invitation)
+                                    ? "The replacement email failed. The previous link is still"
+                                            + " valid until its original expiry."
+                                    : "The email could not be delivered. Check the address and try"
+                                            + " again.";
+                    case UNKNOWN -> "The final email delivery outcome is unknown.";
+                    case CANCELLED -> "The invitation email is no longer needed.";
                 };
+        if ("ACCEPTED".equals(status)) {
+            message = "This invitation has been accepted.";
+        }
         return new InvitationView(
                 invitation.getId(),
                 invitation.getEmail(),
-                invitation.getStatus(),
-                invitation.getExpiresAt(),
+                status,
+                hasUsableLink(invitation) || "ACCEPTED".equals(status)
+                        ? invitation.getExpiresAt()
+                        : null,
                 message,
                 invitation.getSentAt(),
-                resendAvailableAt(invitation),
-                invitation.getReplacementTokenHash() != null,
-                invitation.getFailureCode() != null);
+                resendAvailableAt(invitation, latest),
+                inFlight(latest) && invitation.getTokenHash() != null,
+                deliveryStatus == OutboundEmail.Status.FAILED,
+                deliveryStatus.name(),
+                canResend(invitation, latest),
+                invitation.getLatestEmailId());
     }
 }
