@@ -102,7 +102,7 @@ class ResendDeliveryIntegrationTests {
         worker.runOnce();
         assertThat(currentStatus()).isEqualTo("PROVIDER_ACCEPTED");
         assertThat(requests).hasSize(2);
-        assertThat(requests.get(0).idempotencyKey()).isEqualTo("theeverthread/" + pending);
+        assertThat(requests.get(0).idempotencyKey()).startsWith("theeverthread/" + pending + "/");
         assertThat(requests.get(1).idempotencyKey()).isEqualTo(requests.get(0).idempotencyKey());
         assertThat(requests.get(1).body()).isEqualTo(requests.get(0).body());
         assertThat(jdbc.queryForObject("SELECT PAYLOAD FROM EMAIL_OUTBOX", String.class)).isNull();
@@ -227,7 +227,7 @@ class ResendDeliveryIntegrationTests {
                 .andExpect(status().isOk());
     }
 
-    private UUID register() {
+    private Long register() {
         return identity.register(new RegistrationRequest("Resend Test", RECIPIENT, "Validpass!"))
                 .emailReference();
     }

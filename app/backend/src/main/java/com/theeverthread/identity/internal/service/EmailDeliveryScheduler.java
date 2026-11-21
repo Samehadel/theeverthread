@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class EmailDeliveryScheduler {
     private final EmailDeliveryWorker worker;
 
-    @Scheduled(fixedDelayString = "${theeverthread.registration.delivery.delay:5000}")
+    @Scheduled(cron = "${theeverthread.registration.delivery.cron:*/5 * * * * *}")
     public void scheduledRun() {
         worker.runOnce();
     }

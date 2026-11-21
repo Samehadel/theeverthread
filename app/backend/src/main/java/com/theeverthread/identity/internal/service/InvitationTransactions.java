@@ -176,7 +176,7 @@ public class InvitationTransactions {
     }
 
     private InvitationView queue(
-            InvitationEntity invitation, MembershipEntity admin, UUID seriesId) {
+            InvitationEntity invitation, MembershipEntity admin, Long seriesId) {
         var id =
                 outbox.invitation(
                         invitation.getId(),

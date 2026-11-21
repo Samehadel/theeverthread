@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 @Entity
 @Table(name = "TEAM_INVITATION")
@@ -51,5 +50,5 @@ public class InvitationEntity {
     @Column(length = 64)
     private String acceptedTokenHash;
 
-    private UUID latestEmailId;
+    private Long latestEmailId;
 }

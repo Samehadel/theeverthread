@@ -23,11 +23,13 @@ public class OutboundEmail {
         CANCELLED
     }
 
-    @Id private UUID id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     private Long accountId;
     private Long invitationId;
-    private UUID seriesId;
+    private Long seriesId;
 
     @Column(nullable = false, length = 254)
     private String recipient;

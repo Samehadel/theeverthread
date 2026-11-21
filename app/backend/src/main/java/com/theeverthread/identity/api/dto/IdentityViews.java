@@ -3,13 +3,15 @@ package com.theeverthread.identity.api.dto;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.Instant;
-import java.util.UUID;
 
 public final class IdentityViews {
     private IdentityViews() {}
 
     public record PendingView(
-            String email, Instant resendAvailableAt, String deliveryStatus, UUID emailReference) {}
+            String email,
+            Instant resendAvailableAt,
+            String deliveryStatus,
+            @JsonFormat(shape = JsonFormat.Shape.STRING) Long emailReference) {}
 
     public record VerificationView(String status, AccountView account) {}
 

@@ -14,12 +14,21 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Base64;
+import java.util.UUID;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 @Component
 public class ResendWebhook {
+    record Notification(
+            String eventId,
+            UUID providerId,
+            Long outboxId,
+            String outboxRef,
+            Instant occurredAt,
+            ProviderEvent event) {}
+
     private final SecretKeySpec secret;
     private final JsonMapper json;
     private final Clock clock;
@@ -54,12 +63,20 @@ public class ResendWebhook {
                 return true;
             }
             var providerId = ResendClient.uuid(data.path("email_id").asString(""));
-            var outboxId = ResendClient.uuid(data.path("tags").path("outbox_id").asString(""));
+            var outboxId = data.path("tags").path("outbox_id").asLong(0);
+            var outboxRef = data.path("tags").path("outbox_ref").asString("");
             var occurredAt = Instant.parse(payload.path("created_at").asString(""));
             if (providerId == null) {
                 return false;
             }
-            delivery.webhook(id, providerId, outboxId, occurredAt, event);
+            delivery.webhook(
+                    new Notification(
+                            id,
+                            providerId,
+                            outboxId > 0 ? outboxId : null,
+                            outboxRef,
+                            occurredAt,
+                            event));
             return true;
         } catch (JacksonException | DateTimeParseException exception) {
             return false;

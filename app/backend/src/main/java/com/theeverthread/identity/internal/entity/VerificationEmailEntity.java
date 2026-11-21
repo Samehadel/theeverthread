@@ -6,7 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /** The account’s current verification link and latest email reference. */
 @Entity
@@ -27,7 +26,7 @@ public class VerificationEmailEntity {
     // Legacy scheduling fields are read during the SMTP cutover.
     private Instant nextAttemptAt;
 
-    private UUID latestEmailId;
+    private Long latestEmailId;
 
     private Instant lastSentAt;
 

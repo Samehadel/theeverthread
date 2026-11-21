@@ -11,22 +11,22 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface OutboundEmailRepository extends JpaRepository<OutboundEmail, UUID> {
+public interface OutboundEmailRepository extends JpaRepository<OutboundEmail, Long> {
     @Query(
             "select e.id from OutboundEmail e where e.status = 'PENDING' and"
                     + " e.nextSubmissionAt <= :now order by e.nextSubmissionAt, e.id")
-    List<UUID> dueSubmissions(Instant now, Pageable limit);
+    List<Long> dueSubmissions(Instant now, Pageable limit);
 
     @Query(
             "select e.id from OutboundEmail e where e.status = 'PROVIDER_ACCEPTED' and"
                     + " e.nextLookupAt <= :now order by e.nextLookupAt, e.id")
-    List<UUID> dueLookups(Instant now, Pageable limit);
+    List<Long> dueLookups(Instant now, Pageable limit);
 
     @Query("select e.recipient from OutboundEmail e where e.id = :id")
-    Optional<String> recipient(UUID id);
+    Optional<String> recipient(Long id);
 
     @Query("select e.id from OutboundEmail e where e.providerId = :providerId")
-    Optional<UUID> idForProvider(UUID providerId);
+    Optional<Long> idForProvider(UUID providerId);
 
     @Query(
             """
@@ -36,7 +36,12 @@ public interface OutboundEmailRepository extends JpaRepository<OutboundEmail, UU
                 and coalesce(e.acceptedAt, e.firstAttemptAt) > :cutoff
                 and e.createdAt > :confirmedAt
             """)
-    boolean hasProvisionalInvitation(UUID seriesId, Instant cutoff, Instant confirmedAt);
+    boolean hasProvisionalInvitation(Long seriesId, Instant cutoff, Instant confirmedAt);
+
+    @org.springframework.data.jpa.repository.Lock(
+            jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from OutboundEmail e where e.id = :id")
+    Optional<OutboundEmail> findForUpdate(Long id);
 
     Optional<OutboundEmail> findByTokenHash(String tokenHash);
 }

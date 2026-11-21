@@ -23,7 +23,6 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -65,7 +64,7 @@ public class EmailOutbox {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public UUID verification(Long accountId, String recipient) {
+    public Long verification(Long accountId, String recipient) {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes(32));
         String link = origin + "/verify#" + accountId + "." + token;
         return enqueue(
@@ -84,8 +83,8 @@ public class EmailOutbox {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public UUID invitation(
-            Long invitationId, UUID seriesId, String recipient, String workspace, String inviter) {
+    public Long invitation(
+            Long invitationId, Long seriesId, String recipient, String workspace, String inviter) {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes(32));
         String link = origin + "/invitation/accept#" + invitationId + "." + token;
         String html = invitationTemplate;
@@ -108,10 +107,10 @@ public class EmailOutbox {
                 html);
     }
 
-    private UUID enqueue(
+    private Long enqueue(
             Long accountId,
             Long invitationId,
-            UUID seriesId,
+            Long seriesId,
             String recipient,
             String token,
             String subject,
@@ -121,17 +120,18 @@ public class EmailOutbox {
             throw new IdentityException(503, "EMAIL_UNAVAILABLE", "Email delivery is unavailable.");
         }
         var email = new OutboundEmail();
-        email.setId(UUID.randomUUID());
         email.setAccountId(accountId);
         email.setInvitationId(invitationId);
-        if (invitationId != null) {
-            email.setSeriesId(seriesId == null ? email.getId() : seriesId);
-        }
         email.setRecipient(recipient);
         email.setStatus(OutboundEmail.Status.PENDING);
         email.setCreatedAt(clock.instant());
         email.setNextSubmissionAt(email.getCreatedAt());
         email.setTokenHash(IdentityServiceImpl.hash(token));
+
+        email = emails.save(email);
+        if (invitationId != null) {
+            email.setSeriesId(seriesId == null ? email.getId() : seriesId);
+        }
 
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("from", from);
@@ -142,13 +142,19 @@ public class EmailOutbox {
             request.put("html", html);
         }
         request.put(
-                "tags", List.of(Map.of("name", "outbox_id", "value", email.getId().toString())));
+                "tags",
+                List.of(
+                        Map.of("name", "outbox_id", "value", email.getId().toString()),
+                        Map.of(
+                                "name",
+                                "outbox_ref",
+                                "value",
+                                IdentityServiceImpl.hash(email.getTokenHash()))));
         email.setPayload(encrypt(email.getId(), json.writeValueAsBytes(request)));
-        emails.save(email);
         return email.getId();
     }
 
-    byte[] decrypt(UUID id, String payload) {
+    byte[] decrypt(Long id, String payload) {
         var buffer = ByteBuffer.wrap(Base64.getDecoder().decode(payload));
         byte[] nonce = new byte[12];
         buffer.get(nonce);
@@ -157,7 +163,7 @@ public class EmailOutbox {
         return crypt(Cipher.DECRYPT_MODE, id, nonce, ciphertext);
     }
 
-    private String encrypt(UUID id, byte[] payload) {
+    private String encrypt(Long id, byte[] payload) {
         byte[] nonce = randomBytes(12);
         byte[] ciphertext = crypt(Cipher.ENCRYPT_MODE, id, nonce, payload);
         return Base64.getEncoder()
@@ -168,7 +174,7 @@ public class EmailOutbox {
                                 .array());
     }
 
-    private byte[] crypt(int mode, UUID id, byte[] nonce, byte[] body) {
+    private byte[] crypt(int mode, Long id, byte[] nonce, byte[] body) {
         try {
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(mode, key, new GCMParameterSpec(128, nonce));

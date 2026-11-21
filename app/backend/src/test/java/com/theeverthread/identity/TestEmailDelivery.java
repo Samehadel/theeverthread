@@ -28,7 +28,7 @@ final class TestEmailDelivery {
     private final Clock clock;
     private final CopyOnWriteArrayList<Message> messages = new CopyOnWriteArrayList<>();
 
-    record Message(UUID outboxId, UUID providerId, String recipient, Long targetId, String token) {}
+    record Message(Long outboxId, UUID providerId, String recipient, Long targetId, String token) {}
 
     TestEmailDelivery(ResendClient resend, ResendWebhook webhook, Clock clock) {
         this.webhook = webhook;
@@ -44,7 +44,7 @@ final class TestEmailDelivery {
                 .submit(any(), any(byte[].class));
     }
 
-    static Message parse(UUID outboxId, byte[] payload) {
+    static Message parse(Long outboxId, byte[] payload) {
         var json = JSON.readTree(payload);
         var match = LINK.matcher(json.path("text").asString());
         assertThat(match.find()).isTrue();
@@ -63,7 +63,7 @@ final class TestEmailDelivery {
                 .orElseThrow();
     }
 
-    Message message(UUID outboxId) {
+    Message message(Long outboxId) {
         return messages.stream()
                 .filter(message -> message.outboxId().equals(outboxId))
                 .findFirst()
@@ -81,9 +81,26 @@ final class TestEmailDelivery {
     static byte[] payload(Message message, String type, Instant when, Map<String, Object> details) {
         var data = new java.util.HashMap<>(details);
         data.put("email_id", message.providerId().toString());
-        data.put("tags", Map.of("outbox_id", message.outboxId().toString()));
+        data.put(
+                "tags",
+                Map.of(
+                        "outbox_id",
+                        message.outboxId().toString(),
+                        "outbox_ref",
+                        hash(hash(message.token()))));
         return JSON.writeValueAsBytes(
                 Map.of("type", type, "created_at", when.toString(), "data", data));
+    }
+
+    private static String hash(String value) {
+        try {
+            return java.util.HexFormat.of()
+                    .formatHex(
+                            java.security.MessageDigest.getInstance("SHA-256")
+                                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     static String signature(String id, String timestamp, byte[] body) {

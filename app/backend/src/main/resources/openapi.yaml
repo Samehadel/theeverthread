@@ -1381,7 +1381,7 @@ components:
               type: boolean
             emailReference:
               type: [string, "null"]
-              format: uuid
+              pattern: '^[1-9][0-9]{0,18}$'
     ErrorEnvelope:
       type: object
       required:
@@ -1417,7 +1417,7 @@ components:
           $ref: "#/components/schemas/EmailDeliveryStatus"
         emailReference:
           type: [string, "null"]
-          format: uuid
+          pattern: '^[1-9][0-9]{0,18}$'
     EmailDeliveryStatus:
       type: string
       enum: [PENDING, PROVIDER_ACCEPTED, DELIVERED, FAILED, UNKNOWN, CANCELLED]

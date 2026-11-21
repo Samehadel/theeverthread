@@ -3,7 +3,6 @@ package com.theeverthread.identity.api.dto;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.Instant;
-import java.util.UUID;
 
 public record InvitationView(
         @JsonFormat(shape = JsonFormat.Shape.STRING) Long id,
@@ -17,4 +16,6 @@ public record InvitationView(
         boolean deliveryFailed,
         String deliveryStatus,
         boolean resendEligible,
-        UUID emailReference) {}
+        @com.fasterxml.jackson.annotation.JsonFormat(
+                        shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+                Long emailReference) {}

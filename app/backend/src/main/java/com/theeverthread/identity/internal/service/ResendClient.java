@@ -43,13 +43,21 @@ public class ResendClient {
             long retryAfterSeconds)
             implements Submission {}
 
-    public Submission submit(UUID id, byte[] payload) {
+    public Submission submit(Long id, byte[] payload) {
         if (apiKey.isBlank()) {
             return new Rejected("RESEND_NOT_CONFIGURED", null, true, false, 0);
         }
         var request =
                 request("/emails")
-                        .header("Idempotency-Key", "theeverthread/" + id)
+                        .header(
+                                "Idempotency-Key",
+                                "theeverthread/"
+                                        + id
+                                        + "/"
+                                        + IdentityServiceImpl.hash(
+                                                new String(
+                                                        payload,
+                                                        java.nio.charset.StandardCharsets.UTF_8)))
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofByteArray(payload))
                         .build();
@@ -80,7 +88,7 @@ public class ResendClient {
         }
     }
 
-    public ProviderEvent lookup(UUID providerId) {
+    ProviderEvent lookup(UUID providerId) {
         if (apiKey.isBlank()) {
             return null;
         }

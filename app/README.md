@@ -199,7 +199,8 @@ Registration and workspace invitation requests save their email obligations in t
 same PostgreSQL transaction as their account or invitation changes. A background
 worker submits queued mail to Resend every five seconds. The scheduler can be
 disabled with `THEEVERTHREAD_REGISTRATION_DELIVERY_ENABLED=false` and its interval
-set with `THEEVERTHREAD_REGISTRATION_DELIVERY_DELAY` in milliseconds.
+set with `THEEVERTHREAD_REGISTRATION_DELIVERY_CRON` using Spring’s six-field cron format.
+The default is `*/5 * * * * *`.
 
 Each email has one stable request ID and an encrypted copy of its Resend payload
 until submission ends. Automatic retries reuse the same ID and bytes for up to

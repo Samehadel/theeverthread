@@ -7,6 +7,7 @@ import com.theeverthread.identity.internal.repository.*;
 
 import lombok.RequiredArgsConstructor;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Claims and outcome changes commit separately from network I/O. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailDeliveryTransactions {
@@ -37,23 +39,23 @@ public class EmailDeliveryTransactions {
     private final Clock clock;
     private final JdbcTemplate jdbc;
 
-    public record SubmissionClaim(UUID id, int attempt, String payload, Instant validUntil) {}
+    public record SubmissionClaim(Long id, int attempt, String payload, Instant validUntil) {}
 
-    public record LookupClaim(UUID id, UUID providerId) {}
+    public record LookupClaim(Long id, UUID providerId) {}
 
     @Transactional(readOnly = true)
-    public List<UUID> dueSubmissions() {
+    public List<Long> dueSubmissions() {
         return emails.dueSubmissions(clock.instant(), BATCH);
     }
 
     @Transactional(readOnly = true)
-    public List<UUID> dueLookups() {
+    public List<Long> dueLookups() {
         return emails.dueLookups(clock.instant(), BATCH);
     }
 
     @Transactional
-    public SubmissionClaim claim(UUID id) {
-        var email = lock(id);
+    public SubmissionClaim claim(Long id) {
+        var email = emails.findForUpdate(id).orElse(null);
         var now = clock.instant();
         if (email == null
                 || email.getStatus() != Status.PENDING
@@ -86,15 +88,15 @@ public class EmailDeliveryTransactions {
 
     @Transactional
     public void submitted(SubmissionClaim claim, ResendClient.Submission result) {
-        var email = lock(claim.id());
+        var email = emails.findForUpdate(claim.id()).orElse(null);
         if (email == null
                 || email.getAttempts() != claim.attempt()
                 || email.getStatus() != Status.PENDING) {
             return;
         }
         email.setSubmissionInFlight(false);
-        if (result instanceof ResendClient.Accepted acceptance) {
-            markAccepted(email, acceptance.providerId(), clock.instant());
+        if (result instanceof ResendClient.Accepted(UUID providerId)) {
+            markAccepted(email, providerId, clock.instant());
             record(
                     email,
                     attemptKey(email) + ":result",
@@ -126,8 +128,8 @@ public class EmailDeliveryTransactions {
     }
 
     @Transactional
-    public LookupClaim claimLookup(UUID id) {
-        var email = lock(id);
+    public LookupClaim claimLookup(Long id) {
+        var email = emails.findForUpdate(id).orElse(null);
         var now = clock.instant();
         if (email == null
                 || email.getStatus() != Status.PROVIDER_ACCEPTED
@@ -143,7 +145,7 @@ public class EmailDeliveryTransactions {
     }
 
     @Transactional
-    public void reconciled(LookupClaim claim, ProviderEvent event) {
+    void reconciled(LookupClaim claim, ProviderEvent event) {
         var email = lock(claim.id());
         if (event == null
                 || email == null
@@ -164,13 +166,14 @@ public class EmailDeliveryTransactions {
     }
 
     @Transactional
-    public void webhook(
-            String eventId,
-            UUID providerId,
-            UUID outboxId,
-            Instant occurredAt,
-            ProviderEvent event) {
-        UUID id = emails.idForProvider(providerId).orElse(outboxId);
+    void webhook(ResendWebhook.Notification notification) {
+        log.info("Webhook call received from {}", notification.providerId());
+        var eventId = notification.eventId();
+        var providerId = notification.providerId();
+        var outboxId = notification.outboxId();
+        var occurredAt = notification.occurredAt();
+        var event = notification.event();
+        Long id = emails.idForProvider(providerId).orElse(outboxId);
         if (id == null) {
             return;
         }
@@ -178,6 +181,12 @@ public class EmailDeliveryTransactions {
         if (email == null
                 || email.getFirstAttemptAt() == null
                 || (email.getProviderId() != null && !providerId.equals(email.getProviderId()))) {
+            return;
+        }
+        if (email.getProviderId() == null
+                && (email.getTokenHash() == null
+                        || !IdentityServiceImpl.hash(email.getTokenHash())
+                                .equals(notification.outboxRef()))) {
             return;
         }
         if (!record(email, "webhook:" + eventId, event.kind(), occurredAt, event.reason())) {
@@ -283,13 +292,14 @@ public class EmailDeliveryTransactions {
                         .isPresent();
     }
 
-    private OutboundEmail lock(UUID id) {
+    // Link updates share the signup and acceptance lock, including when no account row exists.
+    private OutboundEmail lock(Long id) {
         var recipient = emails.recipient(id);
         if (recipient.isEmpty()) {
             return null;
         }
         locks.lock("email:" + recipient.get());
-        return emails.findById(id).orElse(null);
+        return emails.findForUpdate(id).orElse(null);
     }
 
     private void finish(OutboundEmail email, Status status, String code) {
