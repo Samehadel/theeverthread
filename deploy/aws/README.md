@@ -1,5 +1,9 @@
 # AWS development deployment
 
+For an existing installation, use [the file sync commands](SYNC.md) to copy the
+deployment script and monitoring configuration from your Mac to the EC2 hosts.
+Syncing files and activating monitoring are separate steps.
+
 For existing installations, follow the [rename cutover](../../docs/RENAMING.md) before deploying: server paths, Compose projects, GHCR packages, and IAM trust must move together.
 
 The root `.github/workflows/ci.yml` runs application checks, publishes the tested
