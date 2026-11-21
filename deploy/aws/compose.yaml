@@ -41,9 +41,14 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+      - "443:443"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 10s
       timeout: 5s
       retries: 6
     logging: *logging
+    volumes:
+      - /opt/theeverthread/nginx:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/lib/letsencrypt/.well-known/acme-challenge:/usr/share/nginx/html/.well-known/acme-challenge:ro
