@@ -61,6 +61,10 @@ server:
         same-site: lax
         secure: ${SESSION_COOKIE_SECURE:true}
 management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: ${HTTP_LATENCY_HISTOGRAM_ENABLED:false}
   endpoints:
     web:
       exposure:

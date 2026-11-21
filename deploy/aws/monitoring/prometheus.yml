@@ -1,0 +1,57 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: backend
+    scheme: https
+    metrics_path: /actuator/prometheus
+    tls_config:
+      ca_file: /run/secrets/monitoring_ca
+      cert_file: /run/secrets/prometheus_certificate
+      key_file: /run/secrets/prometheus_key
+      min_version: TLS12
+    static_configs:
+      - targets: ['172.31.45.83:8443']
+        labels:
+          host: application
+    metric_relabel_configs:
+      - source_labels: [uri]
+        regex: /actuator/.*
+        action: drop
+  - job_name: application-server
+    scheme: https
+    tls_config:
+      ca_file: /run/secrets/monitoring_ca
+      cert_file: /run/secrets/prometheus_certificate
+      key_file: /run/secrets/prometheus_key
+      min_version: TLS12
+    static_configs:
+      - targets: ['172.31.45.83:9100']
+        labels:
+          host: application
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+  - job_name: monitoring-server
+    static_configs:
+      - targets: ['monitoring-node:9100']
+        labels:
+          host: monitoring
+  - job_name: blackbox
+    static_configs:
+      - targets: ['blackbox:9115']
+  - job_name: public-uptime
+    metrics_path: /probe
+    scrape_timeout: 15s
+    params:
+      module: [https_2xx]
+    static_configs:
+      - targets: ['https://theeverthread.com/']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
