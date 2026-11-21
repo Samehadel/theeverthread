@@ -16,6 +16,8 @@ for (const viewport of [
         email: `person${index}@example.com`,
         status:
           index === 0 ? 'ACCEPTED' : index === 1 ? 'FAILED' : 'SMTP_ACCEPTED',
+        deliveryStatus: index === 4 ? 'BOUNCED' : null,
+        message: index === 4 ? 'Email delivery: bounced.' : '',
         sentAt: index === 1 ? null : sentAt,
         expiresAt,
         resendAvailableAt:
@@ -70,6 +72,7 @@ for (const viewport of [
           });
       });
       await page.goto('/workspace/team');
+      await expect(page.getByText('Email delivery: bounced.')).toBeVisible();
       await expect(
         page.getByRole('tab', { name: 'Sent invitations' }),
       ).toHaveAttribute('aria-selected', 'true');

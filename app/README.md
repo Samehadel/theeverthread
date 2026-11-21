@@ -216,12 +216,12 @@ For local email capture, run `docker compose up -d --wait` with the supplied
 Mailpit service. Open http://127.0.0.1:8025 to read verification emails.
 For local HTTP only, set `SESSION_COOKIE_SECURE=false` in the backend environment.
 Set `PUBLIC_ORIGIN` to the browser origin (default http://127.0.0.1:4200).
-`SMTP_HOST` defaults to 127.0.0.1 and `SMTP_PORT` to 1025. Production requires a
+`SMTP_HOST` defaults to 127.0.0.1 and `SMTP_PORT` to 1025. The optional SMTP mode requires a
 configured SMTP sender and credentials (`MAIL_FROM`, `SMTP_USER`, `SMTP_PASSWORD`,
 `SMTP_AUTH=true`, `SMTP_STARTTLS=true`) and HTTPS with secure session cookies.
 The deployment compose file must receive these settings before public release.
 
-Email sending runs in a background worker every five seconds, in batches of 25.
+In local SMTP mode, verification email runs in a background worker every five seconds, in batches of 25.
 A PostgreSQL session advisory lock on a dedicated connection prevents overlapping
 runs across application instances. Use direct PostgreSQL or session pooling;
 transaction-mode PgBouncer cannot hold this lock. Allow at least two connections
@@ -254,43 +254,30 @@ cleanup removes pending data older than 30 days in batches of 100, excluding SEN
 Member acceptance, invitation management, member views, password recovery, and ingress abuse controls remain
 separate release dependencies.
 
-### Brevo SMTP configuration
+### Production email through Resend
 
-Supply these in the backend process environment (or source your untracked `app/.env`
-before starting Java; Spring Boot does not automatically load that file):
+AWS Compose selects `EMAIL_PROVIDER=resend`. Set `MAIL_FROM` to a verified sender,
+`PUBLIC_ORIGIN` to the public HTTPS origin, and supply `RESEND_API_KEY`,
+`RESEND_WEBHOOK_SECRET` and `EMAIL_PAYLOAD_KEY` through the deployment environment.
+Generate the payload key once with `openssl rand -base64 32` and retain it across restarts
+until all pending encrypted messages have finished. The API key must allow sending and
+retrieving emails. Register the HTTPS endpoint `/api/webhooks/resend` for sent, delivered,
+delivery_delayed, bounced, failed, complained and suppressed email events.
 
-```dotenv
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USER=<Brevo SMTP login>
-SMTP_PASSWORD=<Brevo SMTP key, not the API key>
-SMTP_AUTH=true
-SMTP_STARTTLS=true
-MAIL_FROM=<sender address verified in Brevo>
-PUBLIC_ORIGIN=http://127.0.0.1:4200
-SESSION_COOKIE_SECURE=false
-```
+Registration and invitation requests commit their email tasks alongside the corresponding
+business records. The sender retries temporary submission failures with the original key
+and encrypted request. Claims expire after one minute. Automatic submission stops before
+the provider's 24-hour deduplication window closes. Accepted emails are checked by provider
+ID if delivery notifications are missing. Operators can inspect EMAIL_OUTBOX state and
+reason and EMAIL_EVENT history by provider ID. For REVIEW rows, investigate the provider
+logs before issuing a replacement. Stop older application instances before switching modes.
+Legacy pending registration tasks migrate when due. Investigate legacy SENDING rows manually.
+Local development can continue using Mailpit and the SMTP workflow described above.
 
-Use HTTPS and `SESSION_COOKIE_SECURE=true` outside local HTTP development. The SMTP
-login and MAIL_FROM are different settings. The default `no-reply@theeverthread.local`
-is rejected for remote SMTP with `SMTP_FROM_NOT_CONFIGURED`. Authentication errors
-use `SMTP_AUTHENTICATION_FAILED`; other submission failures use `SMTP_DELIVERY_FAILED`.
-Fix configuration and restart; FAILED rows retry when due.
-
-If Brevo receives a message but does not deliver it, inspect **Transactional > Logs**
-by recipient/time or SMTP_MESSAGE_ID for bounce, block, and suppression results.
-Check sender/domain verification and whether transactional sending is active.
-Accepted submissions are not retried automatically because downstream delivery
-cannot be inferred from SMTP. Provider webhooks are outside this change. References:
-[Brevo SMTP troubleshooting](https://help.brevo.com/hc/en-us/articles/115000188150-Troubleshooting-Issues-with-Brevo-SMTP)
-and [transactional logs](https://help.brevo.com/hc/en-us/articles/360021533839-Manage-your-transactional-logs-and-email-previews).
-
-The API contract includes CSRF, session login/logout, and the registration routes.
 Run `./gradlew check bootJar` for PostgreSQL integration and module checks, and
 frontend `npm test`, `npm run typecheck`, `npm run build`, and `npm run test:e2e`.
-Onboarding browser tests require Mailpit (HTTP API defaults to localhost:8025;
-override `MAILPIT_URL`) and a fresh disposable database. They send only local
-captured test emails.
+Onboarding browser tests use Mailpit (HTTP API defaults to localhost:8025;
+override `MAILPIT_URL`) and a disposable database.
 
 ## Team invitations
 

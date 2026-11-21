@@ -31,7 +31,10 @@ export class IdentityPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   readonly mode = this.route.snapshot.data['mode'] as
-    'signup' | 'verify' | 'login' | 'workspace';
+    | 'signup'
+    | 'verify'
+    | 'login'
+    | 'workspace';
   readonly isRegistration = this.mode === 'signup';
   readonly socialStatus = this.route.snapshot.queryParamMap.get('social');
   readonly socialMessage = [
@@ -95,6 +98,19 @@ export class IdentityPage {
   );
   readonly deliveryMessage = computed(() => {
     switch (this.store.pending()?.deliveryStatus) {
+      case 'DELIVERED':
+        return 'identity.mailDelivered';
+      case 'DELIVERY_DELAYED':
+        return 'identity.mailDelayed';
+      case 'REVIEW':
+        return 'identity.mailUnconfirmed';
+      case 'BLOCKED':
+      case 'BOUNCED':
+      case 'DELIVERY_FAILED':
+      case 'SUPPRESSED':
+      case 'COMPLAINED':
+        return 'identity.mailRejected';
+      case 'ACCEPTED':
       case 'SMTP_ACCEPTED':
         return 'identity.pending';
       case 'FAILED':
@@ -106,7 +122,7 @@ export class IdentityPage {
     }
   });
   readonly deliveryInProgress = computed(() =>
-    ['PENDING', 'SENDING', 'FAILED'].includes(
+    ['PENDING', 'SENDING', 'FAILED', 'QUEUED'].includes(
       this.store.pending()?.deliveryStatus ?? '',
     ),
   );
@@ -143,7 +159,11 @@ export class IdentityPage {
     const timer = setInterval(() => this.now.set(Date.now()), 1000);
     const deliveryTimer = setInterval(() => {
       const pending = this.store.pending();
-      if (pending && this.deliveryInProgress())
+      if (
+        pending &&
+        (this.deliveryInProgress() ||
+          ['ACCEPTED', 'DELIVERY_DELAYED'].includes(pending.deliveryStatus))
+      )
         this.store.refreshDelivery(pending.email);
     }, 5000);
     inject(DestroyRef).onDestroy(() => {

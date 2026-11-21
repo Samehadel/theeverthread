@@ -41,6 +41,14 @@ public class SmtpInvitationMail implements InvitationMail {
                 java.util.regex.Matcher.quoteReplacement(HtmlUtils.htmlEscape(value)));
     }
 
+    static String render(
+            String template, String link, String expiry, String workspace, String administrator) {
+        String html = replace(template, "link", link);
+        html = replace(html, "expiry", expiry);
+        html = replace(html, "workspace", workspace);
+        return replace(html, "administrator", administrator);
+    }
+
     public String send(InvitationTransactions.Claim claim, String token) {
         if (from.endsWith("@theeverthread.local")
                 && !java.util.Set.of("127.0.0.1", "localhost", "::1", "mailpit").contains(host))
@@ -48,11 +56,13 @@ public class SmtpInvitationMail implements InvitationMail {
         var message = mail.createMimeMessage();
         try {
             String link = origin + "/invitation/accept#" + claim.view().id() + "." + token;
-            String html = template;
-            html = replace(html, "link", link);
-            html = replace(html, "expiry", claim.view().expiresAt().toString());
-            html = replace(html, "workspace", claim.workspaceName());
-            html = replace(html, "administrator", claim.administratorName());
+            String html =
+                    render(
+                            template,
+                            link,
+                            claim.view().expiresAt().toString(),
+                            claim.workspaceName(),
+                            claim.administratorName());
             var helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(from);
             helper.setTo(claim.view().email());

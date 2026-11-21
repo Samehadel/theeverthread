@@ -11,6 +11,7 @@ export interface Invitation {
   resendAvailableAt?: string | null;
   resending?: boolean;
   deliveryFailed?: boolean;
+  deliveryStatus?: string | null;
 }
 export interface ActiveMember {
   fullName: string;

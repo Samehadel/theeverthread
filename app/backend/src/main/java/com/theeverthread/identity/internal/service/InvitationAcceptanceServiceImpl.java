@@ -33,6 +33,7 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
     private final PasswordEncoder passwords;
     private final Validator validator;
     private final Clock clock;
+    private final EmailLedger ledger;
 
     private final Environment configuration;
 
@@ -55,7 +56,8 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
         }
         var account = registerMember(invitation, request, authenticatedEmail);
         invitation.setAcceptedAt(clock.instant());
-        invitation.setAcceptedTokenHash(invitation.getTokenHash());
+        invitation.setAcceptedTokenHash(IdentityServiceImpl.hash(request.invitation().token()));
+        ledger.cancel(true, invitation.getId());
         invitation.setTokenHash(null);
         invitation.setStatus("ACCEPTED");
         return workspaces.view(account, invitation.getWorkspace().getId());
@@ -143,11 +145,16 @@ public class InvitationAcceptanceServiceImpl implements InvitationAcceptanceServ
                     "INVITATION_USED",
                     "This invitation link has already been used and the account was activated.");
         }
-        if (!hash.equals(invitation.getTokenHash())) {
+        boolean candidate =
+                java.util.Set.of("SENDING", "SMTP_ACCEPTED", "FAILED")
+                                .contains(invitation.getStatus())
+                        && ledger.validCandidate(true, invitation.getId(), hash);
+        if (!candidate && !hash.equals(invitation.getTokenHash())) {
             return invalid();
         }
-        if (!"SMTP_ACCEPTED".equals(invitation.getStatus())
-                || !clock.instant().isBefore(invitation.getExpiresAt())) {
+        if (!candidate
+                && (!"SMTP_ACCEPTED".equals(invitation.getStatus())
+                        || !clock.instant().isBefore(invitation.getExpiresAt()))) {
             return view(
                     invitation,
                     "INVITATION_UNUSABLE",

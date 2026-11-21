@@ -14,6 +14,7 @@ import java.util.Base64;
 public class InvitationServiceImpl implements InvitationService {
     private final InvitationTransactions transactions;
     private final InvitationMail mail;
+    private final java.util.Optional<QueuedInvitations> queue;
     private final SecureRandom random = new SecureRandom();
 
     @Override
@@ -31,6 +32,7 @@ public class InvitationServiceImpl implements InvitationService {
 
     public InvitationView resend(String actor, Long workspaceId, Long id) {
         String token = token();
+        if (queue.isPresent()) return queue.get().resend(actor, workspaceId, id, token);
         var claim = transactions.claimResend(actor, workspaceId, id, token);
         try {
             String messageId = mail.send(claim, token);
@@ -48,6 +50,7 @@ public class InvitationServiceImpl implements InvitationService {
 
     public InvitationView send(String actor, Long workspaceId, InvitationRequest request) {
         String token = token();
+        if (queue.isPresent()) return queue.get().send(actor, workspaceId, request, token);
         var claim = transactions.claim(actor, workspaceId, request, token);
         if (claim.workspaceName() == null) {
             return claim.view();
