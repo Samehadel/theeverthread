@@ -1,5 +1,9 @@
 # Dedicated monitoring EC2: incremental setup
 
+For the architecture, rationale, and a fresh-install learning path, read the
+[monitoring tutorial](TUTORIAL.md). This file remains the detailed incremental
+runbook.
+
 All setup scripts, Docker Compose definitions, and service configuration belong
 in this directory in Git. Keep generated certificates, private keys, passwords,
 and host-specific state under ignored `runtime/`; keep container data in persistent
@@ -14,6 +18,9 @@ and the remaining services will be added in subsequent steps.
 This is an incremental runbook. The current Compose version includes the app
 server mTLS scrape: a fresh install must generate the Step 5a identities before
 starting the monitoring Compose stack, even if reading from Step 2.
+
+Loki is opt-in through the `logs` profile; see Step 7. Its credentials are not
+needed to run the metrics-only stack. Alloy and Grafana log queries are pending.
 
 ## Step 1: prepare the monitoring host
 
@@ -448,3 +455,79 @@ disabled by default, including normal local development. Renewing the shared
 application identity requires recreating both Node Exporter and backend to pick
 up replaced certificate bind mounts. Restart backend to reload its Java trust
 store if the CA changes; never silently replace that CA during leaf renewal.
+
+## Step 7: private Loki log storage
+
+This step prepares storage only. It does not install Alloy or send application
+logs, and does not yet register Loki in Grafana. The synthetic verification log
+is deliberately unrelated to application data.
+
+`loki.yml` runs single-process Loki 3.7.10, with a TSDB v13 index, filesystem
+storage in persistent `loki_data`, replication factor one, and a local ring.
+The Compactor applies 72-hour retention asynchronously, with a two-hour deletion
+delay. Retention is not an exact deletion deadline or a disk-size quota. Monitor
+disk space; this installation has no replicated or off-host log storage.
+
+The `logs` Compose profile makes installation explicit. Loki has a 512 MiB hard
+memory limit, 384 MiB Go soft target, one concurrent query, no result cache, and
+a 128 MB WAL replay budget. Initial ingestion is capped at 0.05 MB/s with a 1 MB
+burst, 1,000 streams maximum, and 64 KB/s per-stream limit with a 256 KB burst.
+Excess traffic can receive HTTP 429; these are initial small-server budgets,
+not a guarantee against exhaustion or log loss. Measure before increasing them.
+
+Native HTTP mTLS requires a CA-signed client certificate with TLS 1.2 or newer.
+`auth_enabled: false` selects single tenancy; it does **not** bypass the TLS
+client-certificate requirement. There is no tenant or per-route role separation:
+clients trusted by this CA can use Loki's HTTP API. In particular, existing
+Prometheus client credentials would also satisfy that trust. Protect all CA-signed
+client keys accordingly. gRPC binds only to container loopback and is not published.
+
+Only `172.31.41.48:3100` is published. Both the standard and internal Docker
+networks are used: publishing a port from an internal-only bridge did not expose
+the listener on this Docker installation. The monitoring security group allows
+3100 only from the application security group; no public Loki access is needed.
+
+After copying the updated tracked files to monitoring (see [SYNC.md](../SYNC.md)),
+run **on monitoring EC2**, with the existing CA already present:
+
+```bash
+cd ~/monitoring
+test -s runtime/pki/ca/cert.pem && test -s runtime/pki/ca/key.pem
+python3 init-mtls.py --logs --app-ip 172.31.45.83 --monitoring-ip 172.31.41.48
+sudo docker compose --profile logs config --quiet
+sudo docker compose --profile logs run --rm --no-deps loki \
+  -config.file=/etc/loki/loki.yml -verify-config=true
+sudo docker compose --profile logs up -d --no-deps loki
+python3 verify-loki.py
+```
+
+`--logs` adds a Loki server identity and an Alloy client identity under the
+existing CA. It preserves the CA, application server identity and Prometheus
+identity; no working credentials are renewed unless `--renew` is explicitly used.
+The Loki certificate contains monitoring's private IP and Docker DNS name `loki`.
+The Alloy certificate is for client authentication. Both expire after 90 days.
+The signing key stays on monitoring. The Alloy bundle is prepared there but
+will be securely transferred to the application host in the collection step.
+
+`verify-loki.py` waits for readiness, verifies unauthenticated requests fail,
+verifies the client rejects an untrusted server, then writes and queries a
+unique synthetic log. It requires only Python's standard library and prints
+no credentials or application logs. Each run adds a small test log subject to
+the same retention as other streams. It tests from monitoring; the application
+to monitoring network path will be verified when Alloy is installed.
+
+For subsequent Loki configuration changes, sync `loki.yml`, validate with the
+`run ... -verify-config=true` command, then recreate only Loki. Keep using
+`--profile logs` when you intend to manage the full stack with Loki included.
+Its restart policy still applies across Docker/host restarts.
+
+For certificate renewal with logging enabled, use `init-mtls.py --logs --renew`
+with the correct IP arguments. This renews **all four** selected leaves, so update
+every dependent service: recreate Prometheus, application Node Exporter, Spring,
+and Loki, and transfer/reload the Alloy identity once Alloy is installed. Automatic
+renewal remains pending. Do not expose generated keys or copy the CA signing key
+to the application host.
+
+References: [native mTLS](https://grafana.com/docs/loki/latest/operations/authentication/),
+[retention](https://grafana.com/docs/loki/latest/operations/storage/retention/),
+and [filesystem storage limits](https://grafana.com/docs/loki/latest/operations/storage/filesystem/).

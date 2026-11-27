@@ -48,6 +48,24 @@ class MtlsTests(unittest.TestCase):
         (self.directory / 'runtime/pki/ca/key.pem').unlink()
         self.run_script(success=False)
 
+    def test_add_log_identities_without_changing_working_metrics_credentials(self):
+        self.run_script()
+        pki = self.directory / 'runtime/pki'
+        original = {str(path.relative_to(pki)): path.read_bytes()
+                    for path in pki.rglob('*.pem')}
+        self.run_script('--logs')
+        for path, content in original.items():
+            self.assertEqual((pki / path).read_bytes(), content)
+        for name, purpose in [('loki', 'sslserver'), ('alloy', 'sslclient')]:
+            subprocess.run(['openssl', 'verify', '-CAfile', str(pki / 'ca/cert.pem'),
+                            '-purpose', purpose, str(pki / name / 'cert.pem')],
+                           check=True, capture_output=True)
+        for flag, address in [('-verify_ip', '172.31.41.48'), ('-verify_hostname', 'loki')]:
+            subprocess.run(['openssl', 'verify', '-CAfile', str(pki / 'ca/cert.pem'),
+                            flag, address, str(pki / 'loki/cert.pem')],
+                           check=True, capture_output=True)
+        self.run_script('--logs', '--monitoring-ip', '172.31.41.49', success=False)
+
 
 if __name__ == '__main__':
     unittest.main()

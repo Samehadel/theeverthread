@@ -71,6 +71,26 @@ services:
       GOMEMLIMIT: 40MiB
     logging: *logging
 
+  loki:
+    image: grafana/loki:3.7.10
+    profiles: [logs]
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/loki.yml]
+    ports:
+      - 172.31.41.48:3100:3100
+    volumes:
+      - ./loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    secrets: [loki_ca, loki_certificate, loki_key]
+    # Docker needs a non-internal bridge to publish the private host listener.
+    networks: [default, telemetry]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    environment:
+      GOMEMLIMIT: 384MiB
+    logging: *logging
+
   monitoring-node:
     image: prom/node-exporter:v1.12.1
     restart: unless-stopped
@@ -93,6 +113,12 @@ services:
     logging: *logging
 
 secrets:
+  loki_ca:
+    file: ./runtime/pki/loki/ca.pem
+  loki_certificate:
+    file: ./runtime/pki/loki/cert.pem
+  loki_key:
+    file: ./runtime/pki/loki/key.pem
   monitoring_ca:
     file: ./runtime/pki/prometheus/ca.pem
   prometheus_certificate:
@@ -107,5 +133,6 @@ networks:
     internal: true
 
 volumes:
+  loki_data:
   prometheus_data:
   grafana_data:

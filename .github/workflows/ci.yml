@@ -8,6 +8,24 @@ on:
 permissions:
   contents: read
 jobs:
+  monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check telemetry identities and service configuration
+        working-directory: deploy/aws/monitoring
+        run: |
+          python3 -m unittest discover -p test_mtls.py
+          bash -n init.sh prepare-host.sh ../deploy.sh
+          bash init.sh
+          python3 init-mtls.py --logs
+          docker compose --profile logs config --quiet
+          docker compose run --rm --no-deps --entrypoint /bin/promtool prometheus check config /etc/prometheus/prometheus.yml
+          docker compose --profile logs run --rm --no-deps loki -config.file=/etc/loki/loki.yml -verify-config=true
+
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +81,7 @@ jobs:
           retention-days: 3
 
   verify:
-    needs: [backend, frontend]
+    needs: [backend, frontend, monitoring]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
