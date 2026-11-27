@@ -56,7 +56,8 @@ class MtlsTests(unittest.TestCase):
         self.run_script('--logs')
         for path, content in original.items():
             self.assertEqual((pki / path).read_bytes(), content)
-        for name, purpose in [('loki', 'sslserver'), ('alloy', 'sslclient')]:
+        for name, purpose in [('loki', 'sslserver'), ('alloy', 'sslclient'),
+                              ('grafana-loki', 'sslclient')]:
             subprocess.run(['openssl', 'verify', '-CAfile', str(pki / 'ca/cert.pem'),
                             '-purpose', purpose, str(pki / name / 'cert.pem')],
                            check=True, capture_output=True)

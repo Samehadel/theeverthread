@@ -1,0 +1,4 @@
+# Empty until runtime/grafana-loki.yaml is generated and mounted over this file.
+# The existing target permits the file bind mount inside the read-only directory.
+apiVersion: 1
+datasources: []

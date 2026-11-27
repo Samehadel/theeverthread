@@ -1,6 +1,40 @@
 # Standalone collectors project on the application EC2; separate from app releases.
 name: theeverthread-app-collectors
 services:
+  alloy:
+    image: grafana/alloy:v1.22.0
+    profiles: [logs]
+    restart: unless-stopped
+    user: '0:0'
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/theeverthread-alloy
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy.alloy:/etc/alloy/config.alloy:ro
+      # Read-only mounting does not restrict Docker API permissions.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - type: volume
+        source: alloy_data
+        target: /var/lib/theeverthread-alloy
+        volume:
+          nocopy: true
+    secrets: [alloy_ca, alloy_certificate, alloy_key]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    environment:
+      GOMEMLIMIT: 128MiB
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+
   app-node:
     image: prom/node-exporter:v1.12.1
     restart: unless-stopped
@@ -30,9 +64,18 @@ services:
         max-size: 5m
         max-file: '2'
 secrets:
+  alloy_ca:
+    file: ./runtime/pki/alloy/ca.pem
+  alloy_certificate:
+    file: ./runtime/pki/alloy/cert.pem
+  alloy_key:
+    file: ./runtime/pki/alloy/key.pem
   node_certificate:
     file: ./runtime/pki/app-node/cert.pem
   node_key:
     file: ./runtime/pki/app-node/key.pem
   monitoring_ca:
     file: ./runtime/pki/app-node/ca.pem
+
+volumes:
+  alloy_data:

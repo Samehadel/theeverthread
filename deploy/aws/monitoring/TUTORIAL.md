@@ -18,7 +18,8 @@ You confirmed `up{job="backend"} = 1` after activating Spring's private listener
 | Spring/JVM and HTTP metrics | Working | Spring exposes metrics privately; Prometheus scrapes over mTLS |
 | Public website uptime | Working | Blackbox probes `https://theeverthread.com/` |
 | Explore and graph metrics | Working | Grafana queries Prometheus |
-| Centralized logs | Storage ready; collection pending | Loki is running with mTLS; Alloy is next |
+| Centralized application/host logs | Working | Alloy ships backend, Nginx and host journal logs to Loki over mTLS |
+| Explore logs | Working | Grafana queries Loki using a separate client identity |
 | Provisioned application dashboards | Pending | Currently use Grafana Explore to verify metrics |
 | Notifications | Not configured | Dashboard-only scope |
 
@@ -35,7 +36,9 @@ flowchart TB
         P[Prometheus: collect and store metrics]
         MN[Node Exporter: monitoring host]
         B[Blackbox Exporter: HTTPS probes]
+        L[Loki: log storage]
         G -->|Query metrics| P
+        G -->|Query logs over mTLS| L
         P -->|Scrape over internal HTTP| MN
         P -->|Request a probe and collect its result| B
     end
@@ -43,10 +46,14 @@ flowchart TB
         S[Spring: private HTTPS metrics on 8443]
         AN[Node Exporter: private HTTPS on 9100]
         W[Public website: HTTPS on 443]
+        Logs[Backend, Nginx and host journal logs]
+        A[Alloy: collect logs only]
+        Logs --> A
     end
     P -->|Pull metrics over mTLS| S
     P -->|Pull metrics over mTLS| AN
     B -->|Check public HTTPS| W
+    A -->|Push logs over mTLS| L
 ```
 
 Prometheus initiates collection: this is a **pull** model. Exporters expose
@@ -78,9 +85,13 @@ repeating it elsewhere.
 | [blackbox.yml](blackbox.yml) | Define the public HTTPS check |
 | [loki.yml](loki.yml) | Configure private log storage, mTLS, retention and ingestion limits |
 | [verify-loki.py](verify-loki.py) | Verify Loki's TLS protection and synthetic log ingestion/query |
+| [alloy.alloy](alloy.alloy) | Select and label log sources, group Spring stack traces, and send to Loki |
+| [Loki data-source template](grafana/loki-datasource.json) | Version Grafana's Loki URL and TLS settings without credentials |
+| [init-loki-grafana.py](init-loki-grafana.py) | Combine the template with local credentials under ignored `runtime/` |
+| [verify-logs.py](verify-logs.py) | Check real log sources through Grafana without printing log contents |
 | [Grafana data source](grafana/provisioning/datasources/prometheus.yaml) | Register Prometheus in Grafana automatically |
 | [init-mtls.py](init-mtls.py) | Generate and verify our private CA and telemetry identities |
-| [app-node.compose.yaml](app-node.compose.yaml) | Run application-host Node Exporter as a separate Compose project |
+| [app-node.compose.yaml](app-node.compose.yaml) | Run application-host Node Exporter and optional Alloy as a separate Compose project |
 | [node-web.yml](node-web.yml) | Require mTLS for application-host Node Exporter |
 | [backend.compose.yaml](backend.compose.yaml) | Extend the application's backend service with private metrics configuration |
 | [MonitoringConfiguration.java](../../../app/backend/src/main/java/com/theeverthread/foundation/internal/security/MonitoringConfiguration.java) | Add and protect Spring's optional metrics listener |
@@ -168,6 +179,9 @@ it; it does not need to match the public website's certificate issuer.
 | Application `key.pem` | Private proof of that server identity | Same protected bundle; mounted into application Node Exporter and Spring |
 | Prometheus `cert.pem` | Public client identity with CN `theeverthread prometheus` | Monitoring `runtime/pki/prometheus` |
 | Prometheus `key.pem` | Private proof of that client identity | Monitoring only; mounted into Prometheus |
+| Loki server bundle | Proves Loki's private IP and Docker name `loki` | Monitoring `runtime/pki/loki` |
+| Alloy client bundle | Lets the application collector authenticate to Loki | Generated on monitoring; securely transferred to application `runtime/pki/alloy` |
+| Grafana log-client bundle | Lets Grafana authenticate to Loki | Monitoring `runtime/pki/grafana-loki`; rendered into private runtime provisioning |
 
 The certificate contains the public key and the CA's signature. The matching
 private key stays secret: a service uses it to prove possession during TLS, not
@@ -193,8 +207,9 @@ IP. Prometheus has a client role. We reused the application certificate for Node
 Exporter and Spring because both serve the same application-host IP. This reduces
 identities to manage but couples their rotation: renew/reload both together.
 
-These certificates are **not used to view Grafana**. Your Grafana connection
-travels through SSH, then uses Grafana's own login.
+These certificates are **not used by your browser to view Grafana**. Your
+connection travels through SSH, then uses Grafana's own login. Grafana's separate
+log-client certificate is used by its server when querying Loki.
 
 ## 7. Repeat the setup in dependency order
 
@@ -377,6 +392,8 @@ In Grafana Explore, choose Prometheus:
 | `probe_success{job="public-uptime"}` | The website passed the actual HTTPS probe: `1` |
 
 `up=1` for a probe does not mean the website is healthy; inspect `probe_success`.
+Similarly, a successful Spring metrics scrape does not prove application
+readiness: Spring can expose metrics while its readiness endpoint returns 503.
 Likewise, container status “Up” only means its process is running, not that a
 scrape succeeds.
 
@@ -446,18 +463,39 @@ certificate's IP SAN. Public-IP changes affect the SSH/sync commands. Changing
 the Grafana bootstrap password file does not reset an existing Grafana user's
 password stored in its volume.
 
-## 11. What we will add next
+## 11. Add log collection after metrics
 
-The intended log path is **application logs → Alloy → mTLS → Loki → Grafana**.
-Alloy will live where the logs originate. Loki now runs on monitoring and passes
-an authenticated synthetic log write/read check. Prometheus remains the metrics
-store. Real application collection and Grafana's Loki data source are still
-pending. [Runbook Step 7](README.md#step-7-private-loki-log-storage) explains how
-to reproduce the storage setup.
+The implemented log path is **application logs → Alloy → mTLS → Loki → Grafana**.
+Alloy lives on application EC2, where the logs originate. It discovers the two
+application containers by Compose labels and follows their replacements. It
+also reads the host journal. Prometheus remains the metrics store.
+
+[Runbook Step 7](README.md#step-7-private-loki-log-storage) explains the Loki
+storage setup; [Step 8](README.md#step-8-collect-application-logs-and-query-them-in-grafana)
+provides the log-collection and Grafana activation commands. The order is:
+
+1. Sync the tracked files and generate additional log identities with `--logs`.
+2. Transfer only Alloy's leaf bundle to application EC2.
+3. Validate and start Alloy with the collectors Compose file's `logs` profile.
+4. Generate Grafana's secret provisioning on monitoring and recreate Grafana.
+5. Run `verify-logs.py`, then choose **Loki** in Grafana Explore.
+
+Alloy starts with one hour of recent history and a 192 MiB memory limit. It saves
+read positions but does not provide a durable outgoing queue. Long outages or
+retries exhausted can lose logs. A read-only Docker socket mount still grants
+powerful Docker API access; Alloy is a trusted host collector.
+
+Try `{host="application",service_name="backend"}`,
+`{host="application",service_name="frontend"}` and
+`{host="application",job="host-journal"}` in Loki. Unlike PromQL, these are
+LogQL stream selectors. Log entries retain their original text; bounded labels
+select sources without indexing request IDs, user IDs or full URLs.
 
 Loki starts with three-day retention and a 512 MiB memory limit. We retained the
-existing CA and generated separate Loki server and Alloy client identities,
+existing CA and generated separate Loki server, Alloy client and Grafana client identities,
 preserving the working metrics keys. The Prometheus client certificate is not
 a Loki server certificate: service identities must fit their TLS role and
-destination. Remaining work includes Alloy, Grafana's Loki data source, useful
-versioned dashboards, and a reliable certificate-renewal process.
+destination. For renewal with logging enabled, use `--logs --renew`, transfer the
+renewed Alloy bundle, regenerate Grafana's private provisioning and recreate all
+affected telemetry services. Logs now work end to end; useful versioned dashboards,
+certificate-renewal automation and off-host backup planning remain.

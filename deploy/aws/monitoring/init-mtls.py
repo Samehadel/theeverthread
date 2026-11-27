@@ -74,7 +74,8 @@ def initialize(root, address, renew=False, logs=False, monitoring_address='172.3
                   ('prometheus', 'clientAuth', 'sslclient', None)]
     if logs:
         identities += [('loki', 'serverAuth', 'sslserver', monitoring_address),
-                       ('alloy', 'clientAuth', 'sslclient', None)]
+                       ('alloy', 'clientAuth', 'sslclient', None),
+                       ('grafana-loki', 'clientAuth', 'sslclient', None)]
     for name, usage, purpose, ip in identities:
         destination = pki / name
         private_directory(destination)
@@ -119,6 +120,7 @@ def initialize(root, address, renew=False, logs=False, monitoring_address='172.3
     if logs:
         print('Loki server: runtime/pki/loki (keep on monitoring only)')
         print('Alloy client: runtime/pki/alloy (transfer securely to application EC2)')
+        print('Grafana log client: runtime/pki/grafana-loki (keep on monitoring only)')
 
 
 if __name__ == '__main__':

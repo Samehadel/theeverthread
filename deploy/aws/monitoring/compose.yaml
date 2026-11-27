@@ -49,6 +49,7 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./runtime/grafana-loki.yaml:/etc/grafana/provisioning/datasources/loki.yaml:ro
     networks: [default, telemetry]
     healthcheck:
       test: [CMD, wget, -q, -O, /dev/null, 'http://localhost:3000/api/health']
