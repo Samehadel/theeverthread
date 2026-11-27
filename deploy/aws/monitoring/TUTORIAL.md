@@ -24,7 +24,7 @@ You confirmed `up{job="backend"} = 1` after activating Spring's private listener
 | Notifications | Not configured | Dashboard-only scope |
 
 HTTP metrics support error-rate and latency analysis. They are not exception
-stack traces: those belong to the pending log collection work.
+stack traces: use the collected backend logs in Loki to read those details.
 
 ## 2. Understand the architecture first
 
@@ -79,8 +79,8 @@ repeating it elsewhere.
 | File | What you use it for |
 | --- | --- |
 | [prepare-host.sh](prepare-host.sh) | Prepare the monitoring Ubuntu host: Docker, Compose and swap |
-| [compose.yaml](compose.yaml) | Define Grafana, Prometheus, Blackbox and monitoring-host Node Exporter |
-| [init.sh](init.sh) | Create the initial Grafana password without replacing an existing one |
+| [compose.yaml](compose.yaml) | Define Grafana, Prometheus, Blackbox, monitoring-host Node Exporter and optional Loki |
+| [init.sh](init.sh) | Create the initial Grafana password and empty log-provisioning placeholder, preserving existing files |
 | [prometheus.yml](prometheus.yml) | Define what Prometheus collects, how often, and with which TLS credentials |
 | [blackbox.yml](blackbox.yml) | Define the public HTTPS check |
 | [loki.yml](loki.yml) | Configure private log storage, mTLS, retention and ingestion limits |
@@ -453,7 +453,8 @@ intend to delete persistent monitoring data.
 
 Leaf certificates last **90 days**, while the CA lasts ten years. Renewal is
 currently manual: `init-mtls.py --renew --app-ip 172.31.45.83` renews the leaves
-using the existing CA. Transfer the new application bundle, then recreate
+for metrics using the existing CA. With logging enabled, include `--logs` and
+follow the additional rotation steps in Section 11. Transfer the new application bundle, then recreate
 Prometheus, application Node Exporter and the backend to load replaced files.
 Plan renewal before expiry; automatic renewal is still pending. Do not delete
 the CA to renew certificates. Back up its signing key securely outside Git.
@@ -465,37 +466,200 @@ password stored in its volume.
 
 ## 11. Add log collection after metrics
 
-The implemented log path is **application logs → Alloy → mTLS → Loki → Grafana**.
-Alloy lives on application EC2, where the logs originate. It discovers the two
-application containers by Compose labels and follows their replacements. It
-also reads the host journal. Prometheus remains the metrics store.
+### Each component has a different job
+
+Log collection has two independent connections: **Alloy pushes logs to Loki**,
+and **Grafana queries Loki when you search**. Grafana does not connect to Alloy,
+read the application server's files, or receive each new entry automatically.
+
+| Component | Where it lives | Responsibility | Related configuration |
+| --- | --- | --- | --- |
+| Backend and Nginx | Application EC2 containers | Produce application and HTTP access/error messages | Existing application containers |
+| Host journal | Application EC2 | Records operating-system and service messages | Existing systemd journal |
+| Alloy | Application EC2, collectors project | Read, label and forward log entries | [app-node.compose.yaml](app-node.compose.yaml), [alloy.alloy](alloy.alloy) |
+| Loki | Monitoring EC2 | Accept, index, retain and query logs | [compose.yaml](compose.yaml), [loki.yml](loki.yml) |
+| Grafana | Monitoring EC2 | Send your LogQL query to Loki and display the response | [Loki data-source template](grafana/loki-datasource.json) |
+
+```mermaid
+sequenceDiagram
+    participant App as Application EC2: backend or Nginx
+    participant Alloy as Application EC2: Alloy
+    participant Loki as Monitoring EC2: Loki
+    participant Grafana as Monitoring EC2: Grafana
+    participant You as Your browser through SSH tunnel
+    App->>Alloy: New stdout/stderr entry, read through Docker
+    Note over Alloy: Add source labels and group Spring stack traces
+    Alloy->>Loki: Push a batch over mTLS to private port 3100
+    Loki->>Loki: Store logs in its persistent volume
+    You->>Grafana: Select Loki, a time range and a LogQL query
+    Grafana->>Loki: Query over mTLS using Grafana's own identity
+    Loki-->>Grafana: Matching stored entries
+    Grafana-->>You: Display the log results
+```
+
+Host journal entries join the same Alloy-to-Loki path. Prometheus remains the
+metrics store: it never receives these log lines. Grafana presents both kinds of
+data through separate data sources, so you can investigate a metric spike and
+then inspect logs for the same time period.
+
+### Follow one log entry through the system
+
+Suppose Spring logs an exception. Docker captures its stdout/stderr. Alloy
+discovers the backend by the stable Compose project and service labels, rather
+than a hard-coded container ID. After a release replaces the container, Alloy
+discovers its replacement without changing the configuration.
+
+Alloy groups timestamped Spring entries and their following stack-trace lines,
+then attaches labels such as `host="application"`,
+`job="application-containers"` and `service_name="backend"`. It sends batches to
+`https://172.31.41.48:3100/loki/api/v1/push`. Loki stores the message and labels;
+the message does not need to contain the labels itself.
+
+Nginx follows the same Docker route because its access and error log files point
+to stdout and stderr. Host messages instead come from `/var/log/journal`, with
+`job="host-journal"`, `service_name="host-journal"` and a service `unit` label
+when available. There is no separate host-log storage service.
+
+Labels identify streams and keep searches manageable. We use a small set of
+source labels; request IDs, user IDs and full URLs do not become indexed labels.
+Original log text is retained, including URLs and addresses in access logs.
+
+### Understand the two secure connections
+
+Both connections use the existing telemetry CA, but the clients have different
+certificates:
+
+| Connection | Server identity | Client identity | Why |
+| --- | --- | --- | --- |
+| Alloy → Loki | `runtime/pki/loki`, covering `172.31.41.48` | `runtime/pki/alloy`, transferred to application EC2 | Authenticate cross-host ingestion and encrypt logs in transit |
+| Grafana → Loki | Same Loki certificate, also covering Docker DNS name `loki` | `runtime/pki/grafana-loki`, kept on monitoring | Authenticate Grafana's queries without sharing Alloy's private key |
+
+Grafana uses `https://loki:3100` on the shared Docker network. Your browser does
+not need to resolve that name or reach port 3100: it talks to Grafana through
+the existing SSH tunnel and Grafana login. Grafana makes the Loki request on
+your behalf. No public Loki or Alloy port was added.
+
+Separate client identities simplify ownership and rotation. They do not create
+read-only versus write-only roles: our Loki configuration trusts valid clients
+from this CA without that API-level separation.
+
+### How Grafana learns about Loki
+
+The [data-source template](grafana/loki-datasource.json) versions Loki's name,
+UID `loki`, internal HTTPS URL and TLS settings. It contains no private key.
+[init-loki-grafana.py](init-loki-grafana.py) combines that template with the local
+Grafana client bundle to create ignored `runtime/grafana-loki.yaml`.
+
+Compose mounts the generated file into Grafana's provisioning directory. On
+startup, Grafana loads it and creates the **Loki** data source. The empty tracked
+[target file](grafana/provisioning/datasources/loki.yaml) permits this nested
+mount inside the read-only provisioning directory. `init.sh` supplies an empty
+runtime placeholder so a metrics-only installation can still start.
+
+This explains why we recreated Grafana after generating the file: it needed to
+load the provisioned data source and mount the new file. Restarting Alloy alone
+would not register Loki in Grafana. Prometheus remains the default data source.
+
+The generated file contains private credentials. Its parent is protected, it is
+excluded from Git, and its contents must not be pasted into the tracked template.
+
+### Repeat the setup in this order
 
 [Runbook Step 7](README.md#step-7-private-loki-log-storage) explains the Loki
 storage setup; [Step 8](README.md#step-8-collect-application-logs-and-query-them-in-grafana)
 provides the log-collection and Grafana activation commands. The order is:
 
-1. Sync the tracked files and generate additional log identities with `--logs`.
-2. Transfer only Alloy's leaf bundle to application EC2.
-3. Validate and start Alloy with the collectors Compose file's `logs` profile.
-4. Generate Grafana's secret provisioning on monitoring and recreate Grafana.
-5. Run `verify-logs.py`, then choose **Loki** in Grafana Explore.
+1. Sync the tracked files to the correct hosts using [SYNC.md](../SYNC.md).
+2. On monitoring, generate the additional identities with `init-mtls.py --logs`.
+   Without `--renew`, existing CA and metrics credentials are preserved.
+3. Validate and start Loki using the monitoring Compose file's `logs` profile.
+4. Securely transfer only Alloy's leaf bundle to application EC2.
+5. Validate and start Alloy using `app-node.compose.yaml --profile logs`.
+6. On monitoring, run `init.sh` and `init-loki-grafana.py`, then recreate Grafana.
+7. Run `verify-loki.py` for storage/TLS checks and `verify-logs.py` for real source
+   checks through Grafana. Neither prints application log contents or credentials.
 
-Alloy starts with one hour of recent history and a 192 MiB memory limit. It saves
-read positions but does not provide a durable outgoing queue. Long outages or
-retries exhausted can lose logs. A read-only Docker socket mount still grants
-powerful Docker API access; Alloy is a trusted host collector.
+Alloy is separate from the application deployment: starting it does not require
+rebuilding Spring or restarting backend/frontend. A configuration edit still
+needs syncing, validation and collector recreation. Git commits alone do not
+update the running collector or Grafana.
 
-Try `{host="application",service_name="backend"}`,
-`{host="application",service_name="frontend"}` and
-`{host="application",job="host-journal"}` in Loki. Unlike PromQL, these are
-LogQL stream selectors. Log entries retain their original text; bounded labels
-select sources without indexing request IDs, user IDs or full URLs.
+### Search and relate logs to metrics in Grafana
 
-Loki starts with three-day retention and a 512 MiB memory limit. We retained the
-existing CA and generated separate Loki server, Alloy client and Grafana client identities,
-preserving the working metrics keys. The Prometheus client certificate is not
-a Loki server certificate: service identities must fit their TLS role and
-destination. For renewal with logging enabled, use `--logs --renew`, transfer the
-renewed Alloy bundle, regenerate Grafana's private provisioning and recreate all
-affected telemetry services. Logs now work end to end; useful versioned dashboards,
-certificate-renewal automation and off-host backup planning remain.
+1. Open Grafana through your SSH tunnel and log in.
+2. Go to **Explore**, select **Loki**, and choose a range such as **Last 15 minutes**.
+3. Switch to the code editor if needed, enter one selector, and run it:
+
+```logql
+{host="application",service_name="backend"}
+```
+
+For Nginx and host messages, respectively:
+
+```logql
+{host="application",service_name="frontend"}
+```
+
+```logql
+{host="application",job="host-journal"}
+```
+
+To narrow backend results to error-related text:
+
+```logql
+{host="application",service_name="backend"} |~ "(?i)error|exception"
+```
+
+The selector chooses streams by labels. The pipeline after `|~` filters their
+text with a regular expression; this example is case-insensitive. Expand an
+entry to read its full message or grouped stack trace. This is LogQL, not PromQL.
+
+For an investigation, first select **Prometheus** and inspect HTTP error rates
+or JVM memory. Note the affected time range, then use Explore's split view or
+another tab with **Loki** and the same time range to inspect backend and Nginx
+entries. We have not configured automatic metric-to-log links or distributed
+tracing; matching the host, service and time range is currently a manual step.
+
+A successful backend scrape (`up=1`) can coexist with readiness `503`. Logs help
+explain such failures; the scrape result only confirms metrics can be collected.
+
+### Know what is stored and what can be lost
+
+Alloy has a 192 MiB memory limit and starts with one hour of recent history.
+Persistent `alloy_data` stores read positions; it is not the central log archive
+and is not a durable outgoing queue. Long outages, exhausted retries, crashes or
+source log rotation can lose entries. Its Docker socket access remains powerful
+even though the socket is mounted read-only.
+
+Loki has a 512 MiB memory limit and stores logs in persistent `loki_data`, with
+three-day asynchronous retention. Restarting Grafana does not delete those logs;
+removing Loki's volume does. Retention is not a strict disk-space quota.
+
+Grafana stores users and configuration in `grafana_data`; Loki stores the queried
+log history. If Grafana is temporarily unavailable, a running Alloy/Loki path can
+continue collecting. If Loki is unavailable, Alloy retries within its configured
+limits and cannot guarantee delivery indefinitely.
+
+For renewal with logging enabled, use `--logs --renew`, transfer the renewed Alloy
+bundle, regenerate Grafana's private provisioning and recreate all affected
+telemetry services. Retain the existing CA. Follow the runbook's complete rotation
+procedure because the helper renews metrics identities too.
+
+### Diagnose a missing log source
+
+| Symptom | What to check |
+| --- | --- |
+| Loki is absent from Grafana's data-source selector | Generated provisioning, correct mounted file, and Grafana recreation |
+| Loki data-source connection fails | Loki readiness, Grafana client certificate, trusted CA and `loki` DNS name |
+| Backend logs appear but frontend logs do not | Correct service labels, recent Nginx activity and selected time range |
+| Host journal logs are absent | Persistent journal path, collector read permissions and recent host activity |
+| Alloy reports TLS failures | Correct transferred client bundle, validity and monitoring private-IP SAN |
+| Alloy reports 429 or dropped batches | Loki ingestion budget, volume of replayed logs and retry limits |
+| Only old entries are missing | One-hour collection window, three-day retention and the selected time range |
+
+Use [verify-logs.py](verify-logs.py) on monitoring to separate a data-source or
+collection problem from a mistaken Explore query. A quiet source may need a new
+request or harmless journal entry before a recent-time-range check can succeed.
+
+Logs now work end to end. Useful versioned dashboards, certificate-renewal
+automation and off-host backup planning remain.
