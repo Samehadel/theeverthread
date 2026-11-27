@@ -8,6 +8,29 @@ on:
 permissions:
   contents: read
 jobs:
+  monitoring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check telemetry identities and service configuration
+        working-directory: deploy/aws/monitoring
+        run: |
+          python3 -m unittest discover -p 'test_*.py'
+          bash -n init.sh prepare-host.sh ../deploy.sh
+          bash init.sh
+          python3 init-mtls.py --logs
+          python3 init-loki-grafana.py
+          docker compose --profile logs config --quiet
+          docker compose -f app-node.compose.yaml --profile logs config --quiet
+          docker compose run --rm --no-deps --entrypoint /bin/promtool prometheus check config /etc/prometheus/prometheus.yml
+          docker compose --profile logs run --rm --no-deps loki -config.file=/etc/loki/loki.yml -verify-config=true
+          docker run --rm --network none -v "$PWD/alloy.alloy:/etc/alloy/config.alloy:ro" grafana/alloy:v1.22.0 validate /etc/alloy/config.alloy
+          docker run --rm --network none --user 0:0 --cap-drop ALL --security-opt no-new-privileges --mount type=volume,destination=/var/lib/theeverthread-alloy,volume-nocopy --entrypoint /bin/sh grafana/alloy:v1.22.0 -c 'touch /var/lib/theeverthread-alloy/permission-check'
+          docker compose run --rm --no-deps --entrypoint /bin/sh grafana -c 'test -r /etc/grafana/provisioning/datasources/loki.yaml'
+
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +86,7 @@ jobs:
           retention-days: 3
 
   verify:
-    needs: [backend, frontend]
+    needs: [backend, frontend, monitoring]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

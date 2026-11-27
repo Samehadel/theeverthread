@@ -39,6 +39,7 @@ rsync -av \
   deploy/aws/monitoring/app-node.compose.yaml \
   deploy/aws/monitoring/node-web.yml \
   deploy/aws/monitoring/backend.compose.yaml \
+  deploy/aws/monitoring/alloy.alloy \
   ubuntu@3.69.199.35:~/monitoring/
 
 rsync -av \
@@ -113,6 +114,12 @@ For monitoring services and the application Node Exporter, follow their matching
 steps in [the monitoring guide](monitoring/README.md). That guide documents the
 required recreate/reload commands and verification. A newly copied Spring scrape
 configuration will report the backend as DOWN until the listener is activated.
+
+For logging, see [Step 8](monitoring/README.md#step-8-collect-application-logs-and-query-them-in-grafana).
+The application file sync above includes Alloy's configuration, but credentials
+are transferred separately over SSH. Run `bash init.sh` before the first Grafana
+recreation with the new Compose file; then generate Loki provisioning as described
+in Step 8. Copying files alone does not enable Alloy or update a running collector.
 
 These are the current EC2 public IPs and your local key paths. Update them here
 if an instance's address or your key location changes. No private key contents,
